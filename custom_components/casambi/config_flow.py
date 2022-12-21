@@ -31,6 +31,10 @@ async def _validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str
     bt_device = async_ble_device_from_address(
         hass, data[CONF_ADDRESS], connectable=True
     )
+
+    if not bt_device:
+        raise NetworkNotFoundError()
+
     await casa.connect(bt_device, data[CONF_PASSWORD])
 
     # Return info that you want to store in the config entry.
