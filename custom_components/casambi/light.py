@@ -9,7 +9,7 @@ from typing import Any, Final, Union, cast
 
 from CasambiBt import Group, Unit, UnitControlType, UnitState
 
-from homeassistant.components.casambi.const import (
+from .const import (
     CONF_IMPORT_GROUPS,
     IDENTIFIER_NETWORK_ID,
 )
