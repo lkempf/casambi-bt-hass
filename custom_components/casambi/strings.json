@@ -1,0 +1,31 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Searching for Casambi networks..."
+      },
+      "network": {
+        "title": "Configure your Casambi network",
+        "description": "The integration tried to discover the bluetooth address of your network. If you have multiple networks make sure that the correct one has been selected.",
+        "data": {
+          "address": "Address",
+          "password": "[%key:common::config_flow::data::password%]",
+          "import_groups": "Import groups?"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
+      "unknown": "[%key:common::config_flow::error::unknown%]"
+    },
+    "abort": {
+      "unknown": "[%key:common::config_flow::error::unknown%]",
+      "bluetooth_error": "Bluetooth doesn't seem to work properly.",
+      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
+      "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]",
+      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]"
+    }
+  }
+}
