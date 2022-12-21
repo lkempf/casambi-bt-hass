@@ -37,6 +37,9 @@ async def _validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str
 
     await casa.connect(bt_device, data[CONF_PASSWORD])
 
+    # We need to disconnect again because otherwise setup will fail
+    await casa.disconnect()
+
     # Return info that you want to store in the config entry.
     return {"title": casa.networkName, "id": casa.networkId}
 
