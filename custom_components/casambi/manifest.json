@@ -6,7 +6,7 @@
   "config_flow": true,
   "documentation": "https://github.com/lkempf/casambi-bt-hass",
   "requirements": [
-    "casambi-bt==0.0.4"
+    "casambi-bt==0.0.5"
   ],
   "dependencies": ["bluetooth"],
   "codeowners": ["@lkempf"],
