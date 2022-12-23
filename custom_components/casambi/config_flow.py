@@ -9,7 +9,10 @@ from CasambiBt.errors import AuthenticationError, NetworkNotFoundError
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.components.bluetooth import async_ble_device_from_address
+from homeassistant.components.bluetooth import (
+    async_ble_device_from_address,
+    async_scanner_count,
+)
 from homeassistant.components.bluetooth.models import BluetoothServiceInfoBleak
 from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
@@ -37,11 +40,14 @@ async def _validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str
 
     await casa.connect(bt_device, data[CONF_PASSWORD])
 
+    network_name = casa.networkName
+    network_id = casa.networkId
+
     # We need to disconnect again because otherwise setup will fail
     await casa.disconnect()
 
     # Return info that you want to store in the config entry.
-    return {"title": casa.networkName, "id": casa.networkId}
+    return {"title": network_name, "id": network_id}
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -102,6 +108,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_IMPORT_GROUPS, default=True): cv.boolean,
             }
         )
+
+        if async_scanner_count(self.hass, connectable=True) < 1:
+            return self.async_show_form(step_id="bluetooth_error")
 
         if user_input:
             errors = {}

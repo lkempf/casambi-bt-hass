@@ -160,6 +160,7 @@ class CasambiLightUnit(CasambiLight):
         unit = cast(Unit, self._obj)
         return (*unit.state.rgb, unit.state.white)  # type: ignore[return-value]
 
+    @callback
     def change_callback(self, unit: Unit) -> None:
         _LOGGER.debug("Handling state change for unit %i", unit.deviceId)
         if unit.state:
