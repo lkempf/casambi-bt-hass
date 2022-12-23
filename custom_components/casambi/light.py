@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABCMeta
 from copy import copy
 import logging
-from typing import Any, Final, Union, cast
+from typing import Any, Final, cast
 
 from CasambiBt import Group, Unit, UnitControlType, UnitState
 
@@ -89,8 +89,9 @@ class CasambiLight(LightEntity, metaclass=ABCMeta):
             supported.add(COLOR_MODE_RGBW)
         elif UnitControlType.RGB in unit_modes:
             supported.add(COLOR_MODE_RGB)
-        elif UnitControlType.DIMMER in unit_modes:
+        if UnitControlType.DIMMER in unit_modes:
             supported.add(COLOR_MODE_BRIGHTNESS)
+            supported.add(COLOR_MODE_ONOFF)
         elif UnitControlType.ONOFF in unit_modes:
             supported.add(COLOR_MODE_ONOFF)
 
@@ -115,6 +116,9 @@ class CasambiLight(LightEntity, metaclass=ABCMeta):
             return COLOR_MODE_ONOFF
         else:
             return COLOR_MODE_UNKNOWN
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        await self._api.casa.setLevel(self._obj, 0)
 
 
 class CasambiLightUnit(CasambiLight):
@@ -183,14 +187,13 @@ class CasambiLightUnit(CasambiLight):
         unit = cast(Unit, self._obj)
         self._api.unregister_unit_updates(unit, self.change_callback)
 
-    async def async_turn_off(self, **kwargs: Any) -> None:
-        await self._api.casa.setLevel(self._obj, 0)
-
     async def async_turn_on(self, **kwargs: Any) -> None:
         unit = cast(Unit, self._obj)
         state = copy(unit.state)
         if not state:
             state = UnitState()
+
+        # TODO: Properly handle multiple attributes.
 
         if ATTR_BRIGHTNESS in kwargs:
             state.dimmer = kwargs[ATTR_BRIGHTNESS]
@@ -200,17 +203,21 @@ class CasambiLightUnit(CasambiLight):
         elif ATTR_RGB_COLOR in kwargs:
             state.rgb = kwargs[ATTR_RGB_COLOR]
         else:
-            return await self._api.casa.turnOn(unit)
+            return await self._api.casa.turnOn(self._obj)
 
-        await self._api.casa.setUnitState(unit, state)
+        await self._api.casa.setUnitState(self._obj, state)
 
 
 class CasambiLightGroup(CasambiLight):
     def __init__(self, api: CasambiApi, group: Group) -> None:
-        if len(group.units) > 0:
-            self._attr_supported_color_modes = self._capabilities_helper(group.units[0])
-        else:
-            self._attr_supported_color_modes = {COLOR_MODE_UNKNOWN}
+        # Find union of supported color modes.
+        supported_modes = set()
+        for unit in group.units:
+            supported_modes = supported_modes.union(self._capabilities_helper(unit))
+
+        if len(supported_modes) == 0:
+            supported_modes.add(COLOR_MODE_UNKNOWN)
+        self._attr_supported_color_modes = supported_modes
         super().__init__(api, group)
 
     @property
@@ -228,7 +235,42 @@ class CasambiLightGroup(CasambiLight):
 
     @property
     def is_on(self) -> bool:
-        return False
+        group = cast(Group, self._obj)
+        return any([u.is_on for u in group.units])
+
+    @property
+    def brightness(self) -> int | None:
+        group = cast(Group, self._obj)
+        for unit in group.units:
+            if unit.unitType.get_control(UnitControlType.DIMMER):
+                return unit.state.dimmer
+
+    @property
+    def rgb_color(self) -> tuple[int, int, int] | None:
+        group = cast(Group, self._obj)
+        for unit in group.units:
+            if unit.unitType.get_control(UnitControlType.RGB):
+                return unit.state.rgb
+
+    @property
+    def rgbw_color(self) -> tuple[int, int, int, int] | None:
+        group = cast(Group, self._obj)
+        for unit in group.units:
+            if unit.unitType.get_control(UnitControlType.DIMMER):
+                return (*unit.state.rgb, unit.state.white)  # type: ignore[return-value]
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        # TODO: Handle more than brightness and on/off.
+        # This will probably require implementing more casambi op codes.
+
+        if ATTR_BRIGHTNESS in kwargs:
+            await self._api.casa.setLevel(self._obj, kwargs[ATTR_BRIGHTNESS])
+        elif ATTR_RGB_COLOR in kwargs:
+            pass
+        elif ATTR_RGBW_COLOR in kwargs:
+            pass
+        else:
+            await self._api.casa.turnOn(self._obj)
 
     async def async_added_to_hass(self) -> None:
         group = cast(Group, self._obj)
