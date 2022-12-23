@@ -180,4 +180,4 @@ class CasambiApi:
         change: bluetooth.BluetoothChange,
     ) -> None:
         if not self.casa.connected and service_info.connectable:
-            self.hass.async_create_task(self.try_reconnect)
+            self.hass.async_create_task(self.try_reconnect())
