@@ -6,7 +6,7 @@ from collections.abc import Iterable
 import logging
 from typing import Callable, Final
 
-from CasambiBt import Casambi, Group, Unit, UnitControlType
+from CasambiBt import Casambi, Group, Unit, UnitControlType, Scene
 from CasambiBt.errors import AuthenticationError, BluetoothError, NetworkNotFoundError
 
 import homeassistant.components.bluetooth as bluetooth
@@ -14,10 +14,11 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.helpers import device_registry
 
-from .const import DOMAIN
+from .const import DOMAIN, IDENTIFIER_NETWORK_ID
 
-PLATFORMS = [Platform.LIGHT]
+PLATFORMS = [Platform.LIGHT, Platform.SCENE]
 _LOGGER: Final = logging.getLogger(__name__)
 
 
@@ -35,6 +36,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = casa_api
     hass.config_entries.async_setup_platforms(entry, PLATFORMS)
+
+    # Regsiter the network device here to avoid code duplication.
+    device_reg = device_registry.async_get(hass)
+    device_reg.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(IDENTIFIER_NETWORK_ID, casa_api.casa.networkId)},
+        name=casa_api.casa.networkName,
+        manufacturer="Casambi",
+        connections={(device_registry.CONNECTION_BLUETOOTH, casa_api.address)}
+    )
 
     return True
 
@@ -128,6 +139,11 @@ class CasambiApi:
         """Return all groups in the network."""
 
         return self.casa.groups
+
+    def get_scenes(self) -> Iterable[Scene]:
+        """Return all scenes in the network."""
+
+        return self.casa.scenes
 
     async def disconnect(self) -> None:
         """Disconnects from the controller and disables automatic reconnect."""

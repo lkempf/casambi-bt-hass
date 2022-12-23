@@ -228,8 +228,6 @@ class CasambiLightGroup(CasambiLight):
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
-            name=self._api.casa.networkName,
-            manufacturer="Casambi",
             identifiers={(IDENTIFIER_NETWORK_ID, self._api.casa.networkId)},
         )
 
