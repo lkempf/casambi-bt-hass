@@ -11,13 +11,13 @@ from CasambiBt.errors import AuthenticationError, BluetoothError, NetworkNotFoun
 
 import homeassistant.components.bluetooth as bluetooth
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD
+from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 
 from .const import DOMAIN
 
-PLATFORMS = ["light"]
+PLATFORMS = [Platform.LIGHT]
 _LOGGER: Final = logging.getLogger(__name__)
 
 
@@ -170,6 +170,8 @@ class CasambiApi:
 
     @callback
     def _unit_changed_handler(self, unit: Unit) -> None:
+        if unit.deviceId not in self._callback_map:
+            return
         for c in self._callback_map[unit.deviceId]:
             c(unit)
 

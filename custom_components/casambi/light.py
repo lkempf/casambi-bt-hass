@@ -160,13 +160,19 @@ class CasambiLightUnit(CasambiLight):
         unit = cast(Unit, self._obj)
         return (*unit.state.rgb, unit.state.white)  # type: ignore[return-value]
 
+    @property
+    def available(self) -> bool:
+        unit = cast(Unit, self._obj)
+        return super().available and unit.online
+
     @callback
     def change_callback(self, unit: Unit) -> None:
         _LOGGER.debug("Handling state change for unit %i", unit.deviceId)
         if unit.state:
             self._obj = unit
         else:
-            _LOGGER.warn("No state in callback for unit %i", unit.deviceId)
+            own_unit = cast(Unit, self._obj)
+            own_unit.online = unit.online
         return super().change_callback(unit)
 
     async def async_added_to_hass(self) -> None:
