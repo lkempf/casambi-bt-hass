@@ -2,7 +2,7 @@
 
 from typing import Final
 
-DOMAIN: Final = "casambi"
+DOMAIN: Final = "casambi-bt"
 
 CONF_IMPORT_GROUPS: Final = "import_groups"
 
