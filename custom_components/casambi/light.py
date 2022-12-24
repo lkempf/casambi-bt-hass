@@ -124,6 +124,8 @@ class CasambiLight(LightEntity, metaclass=ABCMeta):
 class CasambiLightUnit(CasambiLight):
     def __init__(self, api: CasambiApi, unit: Unit) -> None:
         self._attr_supported_color_modes = self._capabilities_helper(unit)
+        self._attr_name = None
+        self._attr_has_entity_name = True
         super().__init__(api, unit)
 
     @property
