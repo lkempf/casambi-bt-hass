@@ -66,7 +66,6 @@ class CasambiLight(LightEntity, metaclass=ABCMeta):
 
         # Effects and transitions aren't supported
         self._attr_supported_features = 0
-        self._attr_name = obj.name
         self._attr_should_poll = False
 
         self._attr_color_mode = self._mode_helper(self.supported_color_modes)
@@ -220,6 +219,7 @@ class CasambiLightGroup(CasambiLight):
         if len(supported_modes) == 0:
             supported_modes.add(COLOR_MODE_UNKNOWN)
         self._attr_supported_color_modes = supported_modes
+        self._attr_name = group.name
         super().__init__(api, group)
 
     @property
