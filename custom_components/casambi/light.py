@@ -258,17 +258,25 @@ class CasambiLightGroup(CasambiLight):
                 return (*unit.state.rgb, unit.state.white)  # type: ignore[return-value]
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        # TODO: Handle more than brightness and on/off.
-        # This will probably require implementing more casambi op codes.
-
+        was_set = False
         if ATTR_BRIGHTNESS in kwargs:
             await self._api.casa.setLevel(self._obj, kwargs[ATTR_BRIGHTNESS])
-        elif ATTR_RGB_COLOR in kwargs:
-            pass
+            was_set = True
+        if ATTR_RGB_COLOR in kwargs:
+            await self._api.casa.setColor(self._obj, kwargs[ATTR_RGB_COLOR])
+            was_set = True
         elif ATTR_RGBW_COLOR in kwargs:
-            pass
-        else:
+            rgb, w = kwargs[ATTR_RGBW_COLOR][:3], kwargs[ATTR_RGBW_COLOR][3]
+            await self._api.casa.setColor(self._obj, rgb)
+            await self._api.casa.setWhite(self._obj, w)
+            was_set = True
+
+        if not was_set:
             await self._api.casa.turnOn(self._obj)
+        else:
+            # Sync brightness for group so that everything turns on.
+            # This might be a bit confusing because the rest isn't synced.
+            await self._api.casa.setLevel(self._obj, self.brightness)
 
     async def async_added_to_hass(self) -> None:
         group = cast(Group, self._obj)
