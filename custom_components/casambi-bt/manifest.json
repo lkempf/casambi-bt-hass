@@ -1,5 +1,5 @@
 {
-  "domain": "casambi",
+  "domain": "casambi-bt",
   "version": "0.0.3",
   "integration_type": "hub",
   "name": "Casambi Bluetooth",
