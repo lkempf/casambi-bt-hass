@@ -1,6 +1,6 @@
 {
   "domain": "casambi-bt",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "integration_type": "hub",
   "name": "Casambi Bluetooth",
   "config_flow": true,
