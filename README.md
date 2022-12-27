@@ -13,7 +13,7 @@ See [https://github.com/lkempf/casambi-bt#casambi-network-setup](https://github.
 
 ### Manual
 
-Place the `casambi-bt` folder in the `custom_components` folder.
+Place the `casambi_bt` folder in the `custom_components` folder.
 
 ### HACS
 
