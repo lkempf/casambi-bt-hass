@@ -41,13 +41,12 @@ async def _validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str
     await casa.connect(bt_device, data[CONF_PASSWORD])
 
     network_name = casa.networkName
-    network_id = casa.networkId
 
     # We need to disconnect again because otherwise setup will fail
     await casa.disconnect()
 
     # Return info that you want to store in the config entry.
-    return {"title": network_name, "id": network_id}
+    return {"title": network_name, "id": data[CONF_ADDRESS]}
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -90,6 +89,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, discovery_info: BluetoothServiceInfoBleak
     ) -> FlowResult:
         self.discovery_info = discovery_info
+
+        await self.async_set_unique_id(discovery_info.address)
+        self._abort_if_unique_id_configured()
+
         return self.async_show_form(step_id="user")
 
     async def async_step_user(
