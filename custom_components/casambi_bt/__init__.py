@@ -44,6 +44,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         identifiers={(DOMAIN, casa_api.casa.networkId)},
         name=casa_api.casa.networkName,
         manufacturer="Casambi",
+        model="Network",
         connections={(device_registry.CONNECTION_BLUETOOTH, casa_api.address)}
     )
 
