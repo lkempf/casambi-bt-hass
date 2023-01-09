@@ -40,6 +40,7 @@ Supported control types:
 - White
 - Rgb
 - OnOff
+- Temperature (Only for units since there are some open problems for groups.)
 
 Not supported yet:
 - Switches
