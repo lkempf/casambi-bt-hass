@@ -303,7 +303,7 @@ class CasambiLightGroup(CasambiLight):
 
         if not was_set:
             await self._api.casa.turnOn(self._obj)
-        else:
+        elif ATTR_BRIGHTNESS not in kwargs:
             # Sync brightness for group so that everything turns on.
             # This might be a bit confusing because the rest isn't synced.
             await self._api.casa.setLevel(self._obj, self.brightness)
