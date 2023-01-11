@@ -1,0 +1,27 @@
+{
+    "config": {
+        "abort": {
+            "already_configured": "Het apparaat is al geconfigureerd",
+            "bluetooth_error": "Bluetooth lijkt niet goed te werken.",
+            "cannot_connect": "Kon geen verbinding maken",
+            "invalid_auth": "Foutieve authenticatie",
+            "reauth_successful": "Her-authenticatie was succesvol",
+            "unknown": "Onverwachte fout"
+        },
+        "error": {
+            "cannot_connect": "Kon geen verbinding maken",
+            "invalid_auth": "Foutieve authenticatie",
+            "unknown": "Onverwachte fout"
+        },
+        "step": {
+            "user": {
+                "data": {
+                    "address": "Adres (Casambi NetworkID)",
+                    "import_groups": "Importeer groupen?",
+                    "password": "Wachtwoord"
+                },
+                "title": "Configureer uw Casambi netwerk"
+            }
+        }
+    }
+}
