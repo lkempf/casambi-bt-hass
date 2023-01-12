@@ -4,7 +4,7 @@
       "user": {
         "title": "Configure your Casambi network",
         "data": {
-          "address": "Address",
+          "address": "Address (Casambi NetworkID)",
           "password": "[%key:common::config_flow::data::password%]",
           "import_groups": "Import groups?"
         }
