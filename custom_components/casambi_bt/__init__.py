@@ -35,7 +35,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     casa_api.casa.registerUnitChangedHandler(casa_api._unit_changed_handler)
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = casa_api
-    hass.config_entries.async_setup_platforms(entry, PLATFORMS)
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Regsiter the network device here to avoid code duplication.
     device_reg = device_registry.async_get(hass)
