@@ -8,7 +8,7 @@
   "requirements": [
     "casambi-bt==0.0.8"
   ],
-  "dependencies": ["bluetooth"],
+  "dependencies": ["bluetooth_adapters"],
   "codeowners": ["@lkempf"],
   "iot_class": "local_push",
   "bluetooth": [
