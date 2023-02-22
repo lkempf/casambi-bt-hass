@@ -46,6 +46,7 @@ Not supported yet:
 - Switches
 - Sensors
 - Additional control types (e.g. temperature, vertical, ...)
+- Networks with classic firmware
 
 ## Reporting issues
 
