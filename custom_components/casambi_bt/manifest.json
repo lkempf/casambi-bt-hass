@@ -1,19 +1,17 @@
 {
   "domain": "casambi_bt",
-  "version": "0.0.5",
-  "integration_type": "hub",
   "name": "Casambi Bluetooth",
-  "config_flow": true,
-  "documentation": "https://github.com/lkempf/casambi-bt-hass",
-  "requirements": [
-    "casambi-bt==0.0.9"
-  ],
-  "dependencies": ["bluetooth_adapters"],
-  "codeowners": ["@lkempf"],
-  "iot_class": "local_push",
   "bluetooth": [
     {
       "service_uuid": "0000fe4d-0000-1000-8000-00805f9b34fb"
     }
-  ]
+  ],
+  "codeowners": ["@lkempf"],
+  "config_flow": true,
+  "dependencies": ["bluetooth_adapters"],
+  "documentation": "https://github.com/lkempf/casambi-bt-hass",
+  "integration_type": "hub",
+  "iot_class": "local_push",
+  "requirements": ["casambi-bt==0.0.9"],
+  "version": "0.0.6"
 }
