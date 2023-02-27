@@ -129,8 +129,9 @@ class CasambiLightUnit(CasambiLight):
         self._attr_has_entity_name = True
 
         temp_control = unit.unitType.get_control(UnitControlType.TEMPERATURE)
-        self._attr_min_color_temp_kelvin = temp_control.min
-        self._attr_max_color_temp_kelvin = temp_control.max
+        if temp_control is not None:
+            self._attr_min_color_temp_kelvin = temp_control.min
+            self._attr_max_color_temp_kelvin = temp_control.max
 
         super().__init__(api, unit)
 
