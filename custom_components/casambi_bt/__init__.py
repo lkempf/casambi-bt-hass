@@ -18,7 +18,7 @@ from homeassistant.helpers import device_registry
 
 from .const import DOMAIN, IDENTIFIER_NETWORK_ID
 
-PLATFORMS = [Platform.LIGHT, Platform.SCENE]
+PLATFORMS = [Platform.LIGHT, Platform.SCENE, Platform.BINARY_SENSOR]
 _LOGGER: Final = logging.getLogger(__name__)
 
 
