@@ -170,7 +170,12 @@ class CasambiApi:
             )
             if not device:
                 return
-            await self.casa.disconnect()
+            try:
+                await self.casa.disconnect()
+            # HACK: This is a workaround for https://github.com/lkempf/casambi-bt-hass/issues/26
+            # We don't actually need to disconnect except to clean up so this should be ok to ignore.
+            except AttributeError:
+                _LOGGER.debug("Unexpected failure during disconnect.")
             await self.casa.connect(device, self.password)
 
             if not self._cancel_bluetooth_callback:
