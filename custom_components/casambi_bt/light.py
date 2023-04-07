@@ -291,7 +291,7 @@ class CasambiLightGroup(CasambiLight):
     @property
     def available(self) -> bool:
         group = cast(Group, self._obj)
-        return super().available and all([unit.online for unit in group.units])
+        return super().available and any([unit.online for unit in group.units])
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         was_set = False
