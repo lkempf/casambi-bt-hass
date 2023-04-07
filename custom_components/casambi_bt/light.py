@@ -288,6 +288,11 @@ class CasambiLightGroup(CasambiLight):
             if unit.unitType.get_control(UnitControlType.DIMMER):
                 return (*unit.state.rgb, unit.state.white)  # type: ignore[return-value]
 
+    @property
+    def available(self) -> bool:
+        group = cast(Group, self._obj)
+        return super().available and all([unit.online for unit in group.units])
+
     async def async_turn_on(self, **kwargs: Any) -> None:
         was_set = False
         if ATTR_BRIGHTNESS in kwargs:
