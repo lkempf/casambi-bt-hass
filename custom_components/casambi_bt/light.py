@@ -190,7 +190,9 @@ class CasambiLightUnit(CasambiLight):
             self._obj = unit
         else:
             own_unit = cast(Unit, self._obj)
-            own_unit.online = unit.online
+            # This update doesn't have a state.
+            # This can happen if the unit isn't online so only look at that part.
+            own_unit._online = unit.online
         return super().change_callback(unit)
 
     async def async_added_to_hass(self) -> None:
