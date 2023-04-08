@@ -239,6 +239,8 @@ class CasambiLightGroup(CasambiLight):
         for unit in group.units:
             supported_modes = supported_modes.union(self._capabilities_helper(unit))
 
+        self._unit_map = dict(zip([u.deviceId for u in group.units], group.units))
+
         # Color temperature for groups isn't supported yet.
         # Oen problems:
         #  - How do we determin min and max temperature? Is it the union or intersection of the intervals?
@@ -266,34 +268,42 @@ class CasambiLightGroup(CasambiLight):
 
     @property
     def is_on(self) -> bool:
-        group = cast(Group, self._obj)
-        return any([u.is_on for u in group.units])
+        return any([u.is_on for u in self._unit_map.values()])
 
     @property
     def brightness(self) -> int | None:
-        group = cast(Group, self._obj)
-        for unit in group.units:
+        for unit in self._unit_map.values():
             if unit.unitType.get_control(UnitControlType.DIMMER):
                 return unit.state.dimmer
 
     @property
     def rgb_color(self) -> tuple[int, int, int] | None:
-        group = cast(Group, self._obj)
-        for unit in group.units:
+        for unit in self._unit_map.values():
             if unit.unitType.get_control(UnitControlType.RGB):
                 return unit.state.rgb
 
     @property
     def rgbw_color(self) -> tuple[int, int, int, int] | None:
-        group = cast(Group, self._obj)
-        for unit in group.units:
+        for unit in self._unit_map.values():
             if unit.unitType.get_control(UnitControlType.DIMMER):
                 return (*unit.state.rgb, unit.state.white)  # type: ignore[return-value]
 
     @property
     def available(self) -> bool:
+        return super().available and any([unit.online for unit in self._unit_map.values()])
+
+    @callback
+    def change_callback(self, unit: Unit) -> None:
         group = cast(Group, self._obj)
-        return super().available and any([unit.online for unit in group.units])
+        _LOGGER.debug("Handling state change for unit %i in group %i", unit.deviceId, group.groudId)
+        if unit.state:
+            self._unit_map[unit.deviceId] = unit
+        else:
+            own_unit = self._unit_map[unit.deviceId]
+            # This update doesn't have a state.
+            # This can happen if the unit isn't online so only look at that part.
+            own_unit._online = unit.online
+        return super().change_callback(unit)
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         was_set = False
