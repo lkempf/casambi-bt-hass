@@ -57,7 +57,7 @@ logger:
   default: info
   logs:
     CasambiBt: debug
-    custom_components.casambi: debug
+    custom_components.casambi_bt: debug
 ```
 
 The log might contain sensitive information about the network (including your network password and the email address used for the network) so sanitize it first or mail it to the address on my github profile referencing your issue.
