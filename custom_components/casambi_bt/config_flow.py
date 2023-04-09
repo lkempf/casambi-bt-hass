@@ -93,7 +93,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         await self.async_set_unique_id(discovery_info.address)
         self._abort_if_unique_id_configured()
 
-        _LOGGER.debug(f"Discovery: [{discovery_info.address}] {discovery_info.name} from {discovery_info.source}.")
+        _LOGGER.debug(
+            f"Discovery: [{discovery_info.address}] {discovery_info.name} from {discovery_info.source}."
+            f"Advertisement: {repr(discovery_info.advertisement)}."
+        )
 
         return self.async_show_form(step_id="user")
 
