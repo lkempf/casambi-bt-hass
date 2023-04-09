@@ -38,6 +38,8 @@ CASA_LIGHT_CTRL_TYPES: Final[list[UnitControlType]] = [
     UnitControlType.DIMMER,
     UnitControlType.RGB,
     UnitControlType.WHITE,
+    UnitControlType.ONOFF,
+    UnitControlType.TEMPERATURE,
 ]
 
 _LOGGER = logging.getLogger(__name__)
@@ -290,12 +292,18 @@ class CasambiLightGroup(CasambiLight):
 
     @property
     def available(self) -> bool:
-        return super().available and any([unit.online for unit in self._unit_map.values()])
+        return super().available and any(
+            [unit.online for unit in self._unit_map.values()]
+        )
 
     @callback
     def change_callback(self, unit: Unit) -> None:
         group = cast(Group, self._obj)
-        _LOGGER.debug("Handling state change for unit %i in group %i", unit.deviceId, group.groudId)
+        _LOGGER.debug(
+            "Handling state change for unit %i in group %i",
+            unit.deviceId,
+            group.groudId,
+        )
         if unit.state:
             self._unit_map[unit.deviceId] = unit
         else:
