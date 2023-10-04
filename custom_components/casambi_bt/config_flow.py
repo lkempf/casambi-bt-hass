@@ -90,6 +90,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         self.discovery_info = discovery_info
 
+        if not discovery_info.connectable:
+            return self.async_abort(reason="Unsuitable discovery.")
+
         await self.async_set_unique_id(discovery_info.address)
         self._abort_if_unique_id_configured()
 

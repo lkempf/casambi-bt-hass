@@ -3,7 +3,8 @@
   "name": "Casambi Bluetooth",
   "bluetooth": [
     {
-      "service_uuid": "0000fe4d-0000-1000-8000-00805f9b34fb"
+      "service_uuid": "0000fe4d-0000-1000-8000-00805f9b34fb",
+      "connectable": true
     }
   ],
   "codeowners": ["@lkempf"],
