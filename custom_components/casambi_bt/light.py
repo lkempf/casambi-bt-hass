@@ -7,7 +7,7 @@ from copy import copy
 import logging
 from typing import Any, Final, cast
 
-from CasambiBt import Group, Unit, UnitControlType, UnitState
+from CasambiBt import Group, Unit, UnitControlType, UnitState, _operation
 
 from .const import (
     CONF_IMPORT_GROUPS,
@@ -233,6 +233,14 @@ class CasambiLightUnit(CasambiLight):
         else:
             await self._api.casa.turnOn(self._obj)
 
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        # HACK: Try to get lights only supporting ONOFF to turn off.
+        # SetLevel doesn't seem to work for unknown reasons.
+        if self.color_mode == COLOR_MODE_ONOFF:
+            unit = cast(Unit, self._obj)
+            await self._api.casa._send(unit, bytes(unit.unitType.stateLength), _operation.OpCode.SetState)
+        else:
+            await super().async_turn_off(**kwargs)
 
 class CasambiLightGroup(CasambiLight):
     def __init__(self, api: CasambiApi, group: Group) -> None:
