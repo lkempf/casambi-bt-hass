@@ -10,8 +10,8 @@ from typing import Any, Final, cast
 from CasambiBt import Group, Unit, UnitControlType, UnitState, _operation
 
 from .const import (
+    DOMAIN,
     CONF_IMPORT_GROUPS,
-    IDENTIFIER_NETWORK_ID,
 )
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
@@ -273,7 +273,7 @@ class CasambiLightGroup(CasambiLight):
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
-            identifiers={(IDENTIFIER_NETWORK_ID, self._api.casa.networkId)},
+            identifiers={(DOMAIN, self._api.casa.networkId)},
         )
 
     @property
