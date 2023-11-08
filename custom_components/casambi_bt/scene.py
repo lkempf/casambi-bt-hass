@@ -11,7 +11,6 @@ from . import CasambiApi
 
 from .const import (
     DOMAIN,
-    IDENTIFIER_NETWORK_ID,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -52,7 +51,7 @@ class CasambiScene(SceneEntity):
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
-            identifiers={(IDENTIFIER_NETWORK_ID, self._api.casa.networkId)},
+            identifiers={(DOMAIN, self._api.casa.networkId)},
         )
 
     async def async_activate(self, **kwargs: Any) -> None:
