@@ -6,5 +6,4 @@ DOMAIN: Final = "casambi_bt"
 
 CONF_IMPORT_GROUPS: Final = "import_groups"
 
-IDENTIFIER_NETWORK_ID: Final = "network-id"
 IDENTIFIER_UUID: Final = "uuid"
