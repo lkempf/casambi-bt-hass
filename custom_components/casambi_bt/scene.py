@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Final
+from typing import Any
 
 from CasambiBt import Scene
 
