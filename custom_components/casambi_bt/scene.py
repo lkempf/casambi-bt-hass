@@ -18,11 +18,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from homeassistant.components.light import ATTR_BRIGHTNESS
 from homeassistant.components.scene import Scene as SceneEntity
 
 _LOGGER = logging.getLogger(__name__)
-
-ATTR_BRIGHTNESS: Final = "brightness"
 
 
 async def async_setup_entry(
