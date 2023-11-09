@@ -6,9 +6,10 @@ import logging
 from collections.abc import Iterable
 from typing import Callable, Final
 
-import homeassistant.components.bluetooth as bluetooth
 from CasambiBt import Casambi, Group, Scene, Unit, UnitControlType
 from CasambiBt.errors import AuthenticationError, BluetoothError, NetworkNotFoundError
+
+import homeassistant.components.bluetooth as bluetooth
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant, callback
@@ -19,7 +20,7 @@ from homeassistant.exceptions import (
 )
 from homeassistant.helpers import device_registry
 
-from .const import DOMAIN, IDENTIFIER_NETWORK_ID
+from .const import DOMAIN
 
 PLATFORMS = [Platform.LIGHT, Platform.SCENE]
 _LOGGER: Final = logging.getLogger(__name__)
@@ -99,6 +100,7 @@ async def async_casmbi_api_setup(
 
 
 class CasambiApi:
+    """Defines a Casambi API."""
     _callback_map: dict[int, list[Callable[[Unit], None]]] = {}
     _cancel_bluetooth_callback: Callable[[], None] = None
     _reconnect_lock = asyncio.Lock()
@@ -184,14 +186,14 @@ class CasambiApi:
             self._reconnect_lock.release()
 
     def register_unit_updates(
-        self, unit: Unit, callback: Callable[[Unit], None]
+        self, unit: Unit, c: Callable[[Unit], None]
     ) -> None:
-        self._callback_map.setdefault(unit.deviceId, []).append(callback)
+        self._callback_map.setdefault(unit.deviceId, []).append(c)
 
     def unregister_unit_updates(
-        self, unit: Unit, callback: Callable[[Unit], None]
+        self, unit: Unit, c: Callable[[Unit], None]
     ) -> None:
-        self._callback_map[unit.deviceId].remove(callback)
+        self._callback_map[unit.deviceId].remove(c)
 
     @callback
     def _unit_changed_handler(self, unit: Unit) -> None:
@@ -204,7 +206,7 @@ class CasambiApi:
     def _bluetooth_callback(
         self,
         service_info: bluetooth.BluetoothServiceInfoBleak,
-        change: bluetooth.BluetoothChange,
+        _change: bluetooth.BluetoothChange,
     ) -> None:
         if not self.casa.connected and service_info.connectable:
             self.hass.async_create_task(self.try_reconnect())

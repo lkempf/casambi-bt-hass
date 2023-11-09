@@ -9,10 +9,6 @@ from typing import Any, Final, cast
 
 from CasambiBt import Group, Unit, UnitControlType, UnitState, _operation
 
-from .const import (
-    DOMAIN,
-    CONF_IMPORT_GROUPS,
-)
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
     ATTR_RGB_COLOR,
@@ -32,7 +28,8 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import DOMAIN, CasambiApi
+from . import CasambiApi
+from .const import DOMAIN, CONF_IMPORT_GROUPS
 
 CASA_LIGHT_CTRL_TYPES: Final[list[UnitControlType]] = [
     UnitControlType.DIMMER,
@@ -50,6 +47,7 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
+    """Create the Casambi light entities."""
     casa_api: CasambiApi = hass.data[DOMAIN][config_entry.entry_id]
 
     light_entities: list[CasambiLight] = [
@@ -64,6 +62,7 @@ async def async_setup_entry(
 
 
 class CasambiLight(LightEntity, metaclass=ABCMeta):
+    """Defines a Casambi light sntity base class."""
     def __init__(self, api: CasambiApi, obj: Group | Unit) -> None:
         self._api = api
         self._obj = obj
@@ -79,7 +78,7 @@ class CasambiLight(LightEntity, metaclass=ABCMeta):
         return self._api.available
 
     @callback
-    def change_callback(self, unit: Unit) -> None:
+    def change_callback(self, _unit: Unit) -> None:
         self.schedule_update_ha_state(False)
 
     def _capabilities_helper(self, unit: Unit) -> set[str]:
@@ -104,27 +103,26 @@ class CasambiLight(LightEntity, metaclass=ABCMeta):
         return supported
 
     def _mode_helper(self, modes: set[ColorMode] | set[str] | None) -> str:
-        if not modes:
-            return COLOR_MODE_UNKNOWN
-
-        if COLOR_MODE_RGBW in modes:
-            return COLOR_MODE_RGBW
-        elif COLOR_MODE_RGB in modes:
-            return COLOR_MODE_RGB
-        elif COLOR_MODE_COLOR_TEMP in modes:
-            return COLOR_MODE_COLOR_TEMP
-        elif COLOR_MODE_BRIGHTNESS in modes:
-            return COLOR_MODE_BRIGHTNESS
-        elif COLOR_MODE_ONOFF in modes:
-            return COLOR_MODE_ONOFF
-        else:
-            return COLOR_MODE_UNKNOWN
+        if modes:
+            if COLOR_MODE_RGBW in modes:
+                return COLOR_MODE_RGBW
+            if COLOR_MODE_RGB in modes:
+                return COLOR_MODE_RGB
+            if COLOR_MODE_COLOR_TEMP in modes:
+                return COLOR_MODE_COLOR_TEMP
+            if COLOR_MODE_BRIGHTNESS in modes:
+                return COLOR_MODE_BRIGHTNESS
+            if COLOR_MODE_ONOFF in modes:
+                return COLOR_MODE_ONOFF
+        return COLOR_MODE_UNKNOWN
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         await self._api.casa.setLevel(self._obj, 0)
 
 
 class CasambiLightUnit(CasambiLight):
+    """Defines a Casambi light entity."""
+
     def __init__(self, api: CasambiApi, unit: Unit) -> None:
         self._attr_supported_color_modes = self._capabilities_helper(unit)
         self._attr_name = None
@@ -243,6 +241,8 @@ class CasambiLightUnit(CasambiLight):
             await super().async_turn_off(**kwargs)
 
 class CasambiLightGroup(CasambiLight):
+    """Defines a Casambi group entity."""
+
     def __init__(self, api: CasambiApi, group: Group) -> None:
         # Find union of supported color modes.
         supported_modes = set()
@@ -285,18 +285,21 @@ class CasambiLightGroup(CasambiLight):
         for unit in self._unit_map.values():
             if unit.unitType.get_control(UnitControlType.DIMMER):
                 return unit.state.dimmer
+        return None
 
     @property
     def rgb_color(self) -> tuple[int, int, int] | None:
         for unit in self._unit_map.values():
             if unit.unitType.get_control(UnitControlType.RGB):
                 return unit.state.rgb
+        return None
 
     @property
     def rgbw_color(self) -> tuple[int, int, int, int] | None:
         for unit in self._unit_map.values():
             if unit.unitType.get_control(UnitControlType.DIMMER):
                 return (*unit.state.rgb, unit.state.white)  # type: ignore[return-value]
+        return None
 
     @property
     def available(self) -> bool:

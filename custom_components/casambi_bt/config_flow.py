@@ -77,7 +77,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_create_entry(title=title, data=data)
 
     async def async_step_bluetooth_error(
-        self, user_input: dict[str, Any] | None = None
+        self, _user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle bluetooth errors.
 
