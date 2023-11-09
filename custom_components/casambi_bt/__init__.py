@@ -10,18 +10,16 @@ import homeassistant.components.bluetooth as bluetooth
 from CasambiBt import Casambi, Group, Scene, Unit, UnitControlType
 from CasambiBt.errors import AuthenticationError, BluetoothError, NetworkNotFoundError
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD, Platform
+from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryError,
     ConfigEntryNotReady,
 )
-from homeassistant.helpers import device_registry
 
-from .const import DOMAIN, IDENTIFIER_NETWORK_ID
+from .const import DOMAIN, PLATFORMS
 
-PLATFORMS = [Platform.LIGHT, Platform.SCENE]
 _LOGGER: Final = logging.getLogger(__name__)
 
 
@@ -33,17 +31,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = api
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
-    # Regsiter the network device here to avoid code duplication.
-    device_reg = device_registry.async_get(hass)
-    device_reg.async_get_or_create(
-        config_entry_id=entry.entry_id,
-        identifiers={(DOMAIN, api.casa.networkId)},
-        name=api.casa.networkName,
-        manufacturer="Casambi",
-        model="Network",
-        connections={(device_registry.CONNECTION_BLUETOOTH, api.address)},
-    )
 
     return True
 
