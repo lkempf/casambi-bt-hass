@@ -21,7 +21,6 @@ class CasambiEntity(Entity):
     def __init__(self, api: CasambiApi, obj: CasambiScene, description: EntityDescription):
         """Initialize Casambi Entity."""
         self.entity_description = description
-        self._attr_name = description.name
         self._api = api
         self._obj = obj
 
@@ -31,7 +30,7 @@ class CasambiEntity(Entity):
         name = f"{self._api.casa.networkId}"
         if self._obj is not None and isinstance(self._obj, CasambiScene):
             name += "-scene"
-        name += f"-{self.description.key}"
+        name += f"-{self.entity_description.key}"
         return name.lower()
 
     @property
