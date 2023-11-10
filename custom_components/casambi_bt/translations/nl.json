@@ -10,6 +10,7 @@
         },
         "error": {
             "cannot_connect": "Kon geen verbinding maken",
+            "invalid_address": "The bluetooth MAC address of the netowrk is invalid.",
             "invalid_auth": "Foutieve authenticatie",
             "unknown": "Onverwachte fout"
         },
@@ -17,7 +18,6 @@
             "user": {
                 "data": {
                     "address": "Adres (Casambi NetworkID)",
-                    "invalid_address": "The bluetooth MAC address of the netowrk is invalid.",
                     "import_groups": "Importeer groupen?",
                     "password": "Wachtwoord"
                 },
