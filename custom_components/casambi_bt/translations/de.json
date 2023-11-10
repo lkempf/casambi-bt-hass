@@ -21,7 +21,7 @@
                     "password": "Passwort"
                 },
                 "title": "Casambi Netzwerk einrichten",
-                "description", "Die Bluetooth MAC Adresse (Netzwerk ID) findest du in den Details deiner Lampen in der Casambi App."
+                "description": "Die Bluetooth MAC Adresse (Netzwerk ID) findest du in den Details deiner Lampen in der Casambi App."
             }
         }
     }
