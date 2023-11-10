@@ -37,6 +37,9 @@ async def async_setup_entry(
 
 
 class CasambiScene(SceneEntity, CasambiEntity):
+
+    _attr_should_poll = True
+
     def __init__(self, api: CasambiApi, scene: Scene) -> None:
         super().__init__(api, scene, EntityDescription(key=scene.sceneId, name=scene.name))
 
