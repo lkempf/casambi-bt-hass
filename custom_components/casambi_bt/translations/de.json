@@ -1,0 +1,28 @@
+{
+    "config": {
+        "abort": {
+            "already_configured": "Netzwerk ist schon konfiguriert.",
+            "bluetooth_error": "Bluetooth scheint nicht richtig zu funktionieren.",
+            "cannot_connect": "Verbindung fehlgeschlagen",
+            "invalid_auth": "Anmeldung ungültig",
+            "reauth_successful": "Neuanmeldung war erfolgreich",
+            "unknown": "Unerwarteter Fehler"
+        },
+        "error": {
+            "cannot_connect": "Verbindung fehlgeschlagen",
+            "invalid_auth": "Anmeldung ungültig",
+            "unknown": "Unerwarteter Fehler"
+        },
+        "step": {
+            "user": {
+                "data": {
+                    "address": "Bluetooth MAC Adresse",
+                    "import_groups": "Gruppen importieren",
+                    "password": "Passwort"
+                },
+                "title": "Casambi Netzwerk einrichten",
+                "description", "Die Bluetooth MAC Adresse (Netzwerk ID) findest du in den Details deiner Lampen in der Casambi App."
+            }
+        }
+    }
+}
