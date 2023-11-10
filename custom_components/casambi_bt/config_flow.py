@@ -18,6 +18,7 @@ from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.device_registry import format_mac
 
 from .const import CONF_IMPORT_GROUPS, DOMAIN
 
@@ -126,19 +127,24 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input:
             errors = {}
 
-            try:
-                info = await _validate_input(self.hass, user_input)
-            except NetworkNotFoundError:
-                errors["base"] = "cannot_connect"
-            except AuthenticationError:
-                errors["base"] = "invalid_auth"
-            except Exception:  # pylint: disable=broad-except
-                _LOGGER.exception("Unexpected exception")
-                errors["base"] = "unknown"
+            user_input[CONF_ADDRESS] = format_mac(user_input[CONF_ADDRESS]).upper()
+
+            if len(user_input[CONF_ADDRESS]) is 17:
+                try:
+                    info = await _validate_input(self.hass, user_input)
+                except NetworkNotFoundError:
+                    errors["base"] = "cannot_connect"
+                except AuthenticationError:
+                    errors["base"] = "invalid_auth"
+                except Exception:  # pylint: disable=broad-except
+                    _LOGGER.exception("Unexpected exception")
+                    errors["base"] = "unknown"
+                else:
+                    return await self._async_create_casa_entry(
+                        info["title"], info["id"], user_input
+                    )
             else:
-                return await self._async_create_casa_entry(
-                    info["title"], info["id"], user_input
-                )
+                errors["base"] = "invalid_address"
 
             return self.async_show_form(
                 step_id="user", data_schema=data_schema, errors=errors
