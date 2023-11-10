@@ -17,6 +17,7 @@
             "user": {
                 "data": {
                     "address": "Adres (Casambi NetworkID)",
+                    "invalid_address": "The bluetooth MAC address of the netowrk is invalid.",
                     "import_groups": "Importeer groupen?",
                     "password": "Wachtwoord"
                 },
