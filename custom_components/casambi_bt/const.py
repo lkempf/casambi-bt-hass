@@ -13,5 +13,3 @@ PLATFORMS = [
 ]
 
 CONF_IMPORT_GROUPS: Final = "import_groups"
-
-IDENTIFIER_UUID: Final = "uuid"
