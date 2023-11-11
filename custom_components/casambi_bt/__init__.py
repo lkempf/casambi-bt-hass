@@ -176,7 +176,17 @@ class CasambiApi:
             # We don't actually need to disconnect except to clean up so this should be ok to ignore.
             except AttributeError:
                 _LOGGER.debug("Unexpected failure during disconnect.")
-            await self.casa.connect(device, self.password)
+
+            try:
+                await self.casa.connect(device, self.password)
+            except BluetoothError as err:
+                raise ConfigEntryNotReady("Failed to use bluetooth") from err
+            except AuthenticationError as err:
+                raise ConfigEntryAuthFailed(f"Failed to authenticate to network {self.address}") from err
+            except NetworkNotFoundError as err:
+                raise ConfigEntryNotReady(f"Network with address {self.address} wasn't found") from err
+            except Exception as err:  # pylint: disable=broad-except
+                raise ConfigEntryError(f"Unexpected error creating network {self.address}") from err
 
             if not self._cancel_bluetooth_callback:
                 self._register_bluetooth_callback()
