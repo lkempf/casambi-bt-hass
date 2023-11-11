@@ -1,6 +1,7 @@
 """Config flow for Casambi Bluetooth integration."""
 from __future__ import annotations
 
+from collections.abc import Mapping
 import logging
 from typing import Any
 
@@ -22,6 +23,20 @@ import homeassistant.helpers.config_validation as cv
 from .const import CONF_IMPORT_GROUPS, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+
+USER_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_ADDRESS): cv.string,
+        vol.Required(CONF_PASSWORD): cv.string,
+        vol.Required(CONF_IMPORT_GROUPS, default=True): cv.boolean,
+    }
+)
+
+REAUTH_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_PASSWORD): cv.string,
+    }
+)
 
 
 async def _validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, str]:
@@ -108,17 +123,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Handle entry of network information and attempt to connect."""
 
-        address_suggestion = vol.UNDEFINED
-        if self.discovery_info:
-            address_suggestion = self.discovery_info.address
-
-        data_schema = vol.Schema(
-            {
-                vol.Required(CONF_ADDRESS, default=address_suggestion): cv.string,
-                vol.Required(CONF_PASSWORD): cv.string,
-                vol.Required(CONF_IMPORT_GROUPS, default=True): cv.boolean,
-            }
-        )
+        suggested_input = {
+            CONF_ADDRESS: vol.UNDEFINED if not self.discovery_info else self.discovery_info.address,
+        }
 
         if async_scanner_count(self.hass, connectable=True) < 1:
             return self.async_show_form(step_id="bluetooth_error")
@@ -141,7 +148,59 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
 
             return self.async_show_form(
-                step_id="user", data_schema=data_schema, errors=errors
+                step_id="user",
+                data_schema=self.add_suggested_values_to_schema(
+                    USER_SCHEMA, user_input
+                ),
+                errors=errors,
             )
 
-        return self.async_show_form(step_id="user", data_schema=data_schema)
+        return self.async_show_form(
+            step_id="user",
+            data_schema=self.add_suggested_values_to_schema(
+                USER_SCHEMA, suggested_input
+            ),
+        )
+
+    async def async_step_reauth(self, _entry_data: Mapping[str, Any]) -> FlowResult:
+        """Handle re-authentication with Casambi."""
+        self.entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Confirm re-authentication with Casambi."""
+        errors: dict[str, str] = {}
+        assert self.entry is not None
+
+        if user_input:
+            data = {
+                **self.entry.data,
+                **user_input,
+            }
+
+            try:
+                await _validate_input(self.hass, user_input)
+            except NetworkNotFoundError:
+                errors["base"] = "cannot_connect"
+            except AuthenticationError:
+                errors["base"] = "invalid_auth"
+            except Exception:  # pylint: disable=broad-except
+                _LOGGER.exception("Unexpected exception")
+                errors["base"] = "unknown"
+            else:
+                self.hass.config_entries.async_update_entry(
+                    self.entry,
+                    data=data,
+                )
+                await self.hass.config_entries.async_reload(self.entry.entry_id)
+                return self.async_abort(reason="reauth_successful")
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=self.add_suggested_values_to_schema(
+                REAUTH_SCHEMA, self.entry.data
+            ),
+            errors=errors,
+        )
