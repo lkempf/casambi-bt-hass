@@ -76,7 +76,7 @@ class CasambiApi:
         self.password = password
         self.casa: Casambi = Casambi(hass.helpers.httpx_client.get_async_client())
 
-    def register_bluetooth_callback(self):
+    def _register_bluetooth_callback(self):
         self._cancel_bluetooth_callback = bluetooth.async_register_callback(
             self.hass,
             self._bluetooth_callback,
@@ -105,7 +105,7 @@ class CasambiApi:
             raise ConfigEntryError(f"Unexpected error creating network {self.address}") from err
         
         if not self._cancel_bluetooth_callback:
-            self.register_bluetooth_callback()
+            self._register_bluetooth_callback()
 
     @property
     def available(self) -> bool:
