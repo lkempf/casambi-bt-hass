@@ -29,7 +29,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Casambi Bluetooth from a config entry."""
     api = CasambiApi(hass, entry.data[CONF_ADDRESS], entry.data[CONF_PASSWORD])
     await api.connect()
-    await api.register_bluetooth_callback()
     api.register_unit_changed_handler()
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = api
 
@@ -104,6 +103,9 @@ class CasambiApi:
             raise ConfigEntryAuthFailed(f"Failed to authenticate to network {self.address}") from err
         except Exception as err:  # pylint: disable=broad-except
             raise ConfigEntryError(f"Unexpected error creating network {self.address}") from err
+        
+        if not self._cancel_bluetooth_callback:
+            self.register_bluetooth_callback()
 
     @property
     def available(self) -> bool:
@@ -149,21 +151,14 @@ class CasambiApi:
         await self._reconnect_lock.acquire()
 
         try:
-            device = bluetooth.async_ble_device_from_address(
-                self.hass, self.address, connectable=True
-            )
-            if not device:
-                return
             try:
                 await self.casa.disconnect()
             # HACK: This is a workaround for https://github.com/lkempf/casambi-bt-hass/issues/26
             # We don't actually need to disconnect except to clean up so this should be ok to ignore.
             except AttributeError:
                 _LOGGER.debug("Unexpected failure during disconnect.")
-            await self.casa.connect(device, self.password)
 
-            if not self._cancel_bluetooth_callback:
-                self.register_bluetooth_callback()
+            await self.connect()
         finally:
             self._reconnect_lock.release()
 
