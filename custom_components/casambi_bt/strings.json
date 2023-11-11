@@ -8,6 +8,12 @@
           "password": "[%key:common::config_flow::data::password%]",
           "import_groups": "Import groups?"
         }
+      },
+      "reauth_confirm": {
+        "description": "Please verify the network password.",
+        "data": {
+          "password": "[%key:common::config_flow::data::password%]"
+        }
       }
     },
     "error": {

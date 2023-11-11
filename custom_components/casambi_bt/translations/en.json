@@ -21,6 +21,12 @@
                     "password": "Password"
                 },
                 "title": "Configure your Casambi network"
+            },
+            "reauth_confirm": {
+                "data": {
+                    "password": "Password"
+                },
+                "title": "Please verify your network password."
             }
         }
     }
