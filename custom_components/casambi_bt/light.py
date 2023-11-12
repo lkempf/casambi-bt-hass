@@ -62,7 +62,7 @@ async def async_setup_entry(
 
 
 class CasambiLight(LightEntity, metaclass=ABCMeta):
-    """Defines a Casambi light sntity base class."""
+    """Defines a Casambi light entity base class."""
     def __init__(self, api: CasambiApi, obj: Group | Unit) -> None:
         self._api = api
         self._obj = obj
