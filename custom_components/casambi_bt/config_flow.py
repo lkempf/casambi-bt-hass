@@ -38,6 +38,7 @@ async def _validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str
     if not bt_device:
         raise NetworkNotFoundError()
 
+    casa.invalidateCache(bt_device.address)
     await casa.connect(bt_device, data[CONF_PASSWORD])
 
     network_name = casa.networkName
