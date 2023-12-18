@@ -5,5 +5,3 @@ from typing import Final
 DOMAIN: Final = "casambi_bt"
 
 CONF_IMPORT_GROUPS: Final = "import_groups"
-
-IDENTIFIER_UUID: Final = "uuid"

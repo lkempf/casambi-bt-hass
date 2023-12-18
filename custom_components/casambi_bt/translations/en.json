@@ -16,11 +16,12 @@
         "step": {
             "user": {
                 "data": {
-                    "address": "Address",
-                    "import_groups": "Import groups?",
+                    "address": "Bluetooth MAC address",
+                    "import_groups": "Import groups",
                     "password": "Password"
                 },
-                "title": "Configure your Casambi network"
+                "title": "Configure your Casambi network",
+                "description": "Find the bluetooth MAC address (Network ID) in the luminair details of your casambi app."
             },
             "reauth_confirm": {
                 "data": {

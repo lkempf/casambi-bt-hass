@@ -19,7 +19,7 @@ from homeassistant.exceptions import (
 )
 from homeassistant.helpers import device_registry
 
-from .const import DOMAIN, IDENTIFIER_NETWORK_ID
+from .const import DOMAIN
 
 PLATFORMS = [Platform.LIGHT, Platform.SCENE]
 _LOGGER: Final = logging.getLogger(__name__)
