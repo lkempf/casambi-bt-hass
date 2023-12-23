@@ -19,6 +19,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 import homeassistant.helpers.config_validation as cv
 
+from . import get_config_dir
 from .const import CONF_IMPORT_GROUPS, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ async def _validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
     """
     client = hass.helpers.httpx_client.get_async_client()
-    casa = Casambi(client)
+    casa = Casambi(client, get_config_dir(hass))
     bt_device = async_ble_device_from_address(
         hass, data[CONF_ADDRESS], connectable=True
     )
