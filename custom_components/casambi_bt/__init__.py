@@ -2,15 +2,15 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable, Iterable
 import logging
-from collections.abc import Iterable
 from pathlib import Path
-from typing import Callable, Final
+from typing import Final
 
 from CasambiBt import Casambi, Group, Scene, Unit, UnitControlType
 from CasambiBt.errors import AuthenticationError, BluetoothError, NetworkNotFoundError
 
-import homeassistant.components.bluetooth as bluetooth
+from homeassistant.components import bluetooth
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD
 from homeassistant.core import HomeAssistant, callback
@@ -49,7 +49,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unload_ok
 
 
-def get_config_dir(hass: HomeAssistant) -> Path:
+def get_cache_dir(hass: HomeAssistant) -> Path:
+    """Return the cache dir that should be used by CasambiBt."""
     conf_path = Path(hass.config.config_dir)
     return conf_path / ".storage" / DOMAIN
 
@@ -64,11 +65,13 @@ class CasambiApi:
         address: str,
         password: str,
     ) -> None:
+        """Initialize a Casambi API."""
+
         self.hass = hass
         self.conf_entry = conf_entry
         self.address = address
         self.password = password
-        self.casa: Casambi = Casambi(hass.helpers.httpx_client.get_async_client(), get_config_dir(hass))
+        self.casa: Casambi = Casambi(hass.helpers.httpx_client.get_async_client(), get_cache_dir(hass))
 
         self._callback_map: dict[int, list[Callable[[Unit], None]]] = {}
         self._cancel_bluetooth_callback: Callable[[], None] | None = None
@@ -84,9 +87,10 @@ class CasambiApi:
             self._bluetooth_callback,
             {"address": self.address, "connectable": True},
             bluetooth.BluetoothScanningMode.ACTIVE,
-        )        
+        )
 
     async def connect(self) -> None:
+        """Connect to the Casmabi network."""
         try:
             device = bluetooth.async_ble_device_from_address(
                 self.hass, self.address, connectable=True
@@ -103,7 +107,7 @@ class CasambiApi:
             raise ConfigEntryAuthFailed(f"Failed to authenticate to network {self.address}") from err
         except Exception as err:  # pylint: disable=broad-except
             raise ConfigEntryError(f"Unexpected error creating network {self.address}") from err
-        
+
         # Only register bluetooth callback after connection.
         # Otherwise we get an immediate callback and attempt two connections at once.
         if not self._cancel_bluetooth_callback:
@@ -123,7 +127,7 @@ class CasambiApi:
             return self.casa.units
 
         return filter(
-            lambda u: any([uc.type in control_types for uc in u.unitType.controls]),  # type: ignore[arg-type]
+            lambda u: any(uc.type in control_types for uc in u.unitType.controls),  # type: ignore[arg-type]
             self.casa.units,
         )
 
@@ -150,8 +154,8 @@ class CasambiApi:
 
             try:
                 await self.casa.disconnect()
-            except:
-                _LOGGER.error("Error during disconnect.", exc_info=True)
+            except Exception:
+                _LOGGER.exception("Error during disconnect.")
             self.casa.unregisterUnitChangedHandler(self._unit_changed_handler)
 
     @callback
@@ -169,12 +173,13 @@ class CasambiApi:
         if device is not None:
             try:
                 await self.try_reconnect()
-            except:
+            except Exception:
                 _LOGGER.error("Error during first reconnect. This is not unusual.")
         else:
             _LOGGER.debug("Skipping reconnect. HA reports device not present.")
 
     async def try_reconnect(self) -> None:
+        """Attemtps to reconnect to the Casambi network. Disconnects first to ensure a consitent state."""
         if self._reconnect_lock.locked():
             return
 
@@ -196,11 +201,21 @@ class CasambiApi:
     def register_unit_updates(
         self, unit: Unit, c: Callable[[Unit], None]
     ) -> None:
+        """Register a callback for unit updates.
+
+        :param unit: The unit for which changes should be reported.
+        :param c: The callback.
+        """
         self._callback_map.setdefault(unit.deviceId, []).append(c)
 
     def unregister_unit_updates(
         self, unit: Unit, c: Callable[[Unit], None]
     ) -> None:
+        """Unregister a callback for unit updates.
+
+        :param unit: The unit for which changes should no longer be reported.
+        :param c: The callback.
+        """
         self._callback_map[unit.deviceId].remove(c)
 
     @callback

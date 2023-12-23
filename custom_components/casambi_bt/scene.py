@@ -36,24 +36,29 @@ class CasambiScene(SceneEntity):
     """Defines a Casambi scene entity."""
 
     def __init__(self, api: CasambiApi, scene: Scene) -> None:
+        """Initialize a Casambi scene entity."""
         self._api = api
         self.scene = scene
 
     @property
     def name(self) -> str:
+        """Return the name of the scene."""
         return self.scene.name
 
     @property
     def unique_id(self) -> str:
+        """Return a unique ID."""
         return f"{self._api.casa.networkId}-scene-{self.scene.sceneId}"
 
     @property
     def device_info(self) -> DeviceInfo:
+        """Return the device info of the network device."""
         return DeviceInfo(
             identifiers={(DOMAIN, self._api.casa.networkId)},
         )
 
     async def async_activate(self, **kwargs: Any) -> None:
+        """Activate a scene."""
         _LOGGER.info("Switching to scene %s", self.name)
         brightness = kwargs.get(ATTR_BRIGHTNESS, 0xFF)
         await self._api.casa.switchToScene(self.scene, brightness)
