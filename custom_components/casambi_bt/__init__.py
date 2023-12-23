@@ -28,7 +28,7 @@ _LOGGER: Final = logging.getLogger(__name__)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Casambi Bluetooth from a config entry."""
-    api = CasambiApi(hass, entry.data[CONF_ADDRESS], entry.data[CONF_PASSWORD])
+    api = CasambiApi(hass, entry, entry.data[CONF_ADDRESS], entry.data[CONF_PASSWORD])
     await api.connect()
     api.register_unit_changed_handler()
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = api
@@ -67,22 +67,31 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 def get_config_dir(hass: HomeAssistant) -> Path:
     conf_path = Path(hass.config.config_dir)
     return conf_path / ".storage" / DOMAIN
-    
+
 
 class CasambiApi:
-    _callback_map: dict[int, list[Callable[[Unit], None]]] = {}
-    _cancel_bluetooth_callback: Callable[[], None] = None
-    _reconnect_lock = asyncio.Lock()
-
     def __init__(
-        self, hass: HomeAssistant, address: str, password: str
+        self,
+        hass: HomeAssistant,
+        conf_entry: ConfigEntry,
+        address: str,
+        password: str,
     ) -> None:
         self.hass = hass
+        self.conf_entry = conf_entry
         self.address = address
         self.password = password
         self.casa: Casambi = Casambi(hass.helpers.httpx_client.get_async_client())
 
-    def _register_bluetooth_callback(self):
+        self._callback_map: dict[int, list[Callable[[Unit], None]]] = {}
+        self._cancel_bluetooth_callback: Callable[[], None] | None
+        self._reconnect_lock = asyncio.Lock()
+        self._first_disconnect = True
+
+        self._register_bluetooth_callback()
+        self.casa.registerDisconnectCallback(self._casa_disconnect)
+
+    def _register_bluetooth_callback(self) -> None:
         self._cancel_bluetooth_callback = bluetooth.async_register_callback(
             self.hass,
             self._bluetooth_callback,
@@ -143,10 +152,36 @@ class CasambiApi:
 
     async def disconnect(self) -> None:
         """Disconnects from the controller and disables automatic reconnect."""
-        if self._cancel_bluetooth_callback:
-            self._cancel_bluetooth_callback()
-            self._cancel_bluetooth_callback = None
-        await self.casa.disconnect()
+        async with self._reconnect_lock:
+            if self._cancel_bluetooth_callback is not None:
+                self._cancel_bluetooth_callback()
+                self._cancel_bluetooth_callback = None
+
+            # This needs to happen before we disconnect.
+            # We don't want to be informed about disconnects initiated by us.
+            self.casa.unregisterDisconnectCallback(self._casa_disconnect)
+
+            await self.casa.disconnect()
+
+    @callback
+    def _casa_disconnect(self) -> None:
+        if self._first_disconnect:
+            self._first_disconnect = False
+            self.conf_entry.async_create_background_task(
+                self.hass, self._delayed_reconnect(), "Delayed reconnect"
+            )
+
+    async def _delayed_reconnect(self) -> None:
+        await asyncio.sleep(30)
+        _LOGGER.debug("Starting delayed reconnect.")
+        device = bluetooth.async_ble_device_from_address(self.hass, self.address)
+        if device is not None:
+            try:
+                await self.try_reconnect()
+            except:
+                _LOGGER.error("Error during first reconnect. This is not unusual.")
+        else:
+            _LOGGER.debug("Skipping reconnect. HA reports device not present.")
 
     async def try_reconnect(self) -> None:
         if self._reconnect_lock.locked():
@@ -163,6 +198,8 @@ class CasambiApi:
             # We don't actually need to disconnect except to clean up so this should be ok to ignore.
             except AttributeError:
                 _LOGGER.debug("Unexpected failure during disconnect.")
+            await self.casa.connect(device, self.password)
+            self._first_disconnect = True
 
             await self.connect()
         finally:
@@ -192,4 +229,6 @@ class CasambiApi:
         change: bluetooth.BluetoothChange,
     ) -> None:
         if not self.casa.connected and service_info.connectable:
-            self.hass.async_create_task(self.try_reconnect())
+            self.conf_entry.async_create_background_task(
+                self.hass, self.try_reconnect(), "Reconnect"
+            )
