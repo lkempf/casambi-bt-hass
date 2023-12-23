@@ -30,7 +30,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Casambi Bluetooth from a config entry."""
     conf = entry.data
     casa_api = await async_casmbi_api_setup(
-        hass, conf[CONF_ADDRESS], conf[CONF_PASSWORD]
+        hass, entry, conf[CONF_ADDRESS], conf[CONF_PASSWORD]
     )
 
     if not casa_api:
@@ -71,7 +71,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_casmbi_api_setup(
-    hass: HomeAssistant, address: str, password: str
+    hass: HomeAssistant, entry: ConfigEntry, address: str, password: str
 ) -> CasambiApi | None:
     client = hass.helpers.httpx_client.get_async_client()
     try:
@@ -95,31 +95,39 @@ async def async_casmbi_api_setup(
     except Exception as err:  # pylint: disable=broad-except
         raise ConfigEntryError(f"Unexpected error creating network {address}") from err
 
-    api = CasambiApi(casa, hass, address, password)
+    api = CasambiApi(casa, hass, entry, address, password)
     return api
 
 
 def get_config_dir(hass: HomeAssistant) -> Path:
     conf_path = Path(hass.config.config_dir)
     return conf_path / ".storage" / DOMAIN
-    
+
 
 class CasambiApi:
-    _callback_map: dict[int, list[Callable[[Unit], None]]] = {}
-    _cancel_bluetooth_callback: Callable[[], None] = None
-    _reconnect_lock = asyncio.Lock()
-
     def __init__(
-        self, casa: Casambi, hass: HomeAssistant, address: str, password: str
+        self,
+        casa: Casambi,
+        hass: HomeAssistant,
+        conf_entry: ConfigEntry,
+        address: str,
+        password: str,
     ) -> None:
         self.casa = casa
         self.hass = hass
+        self.conf_entry = conf_entry
         self.address = address
         self.password = password
 
-        self._register_bluetooth_callback()
+        self._callback_map: dict[int, list[Callable[[Unit], None]]] = {}
+        self._cancel_bluetooth_callback: Callable[[], None] | None
+        self._reconnect_lock = asyncio.Lock()
+        self._first_disconnect = True
 
-    def _register_bluetooth_callback(self):
+        self._register_bluetooth_callback()
+        self.casa.registerDisconnectCallback(self._casa_disconnect)
+
+    def _register_bluetooth_callback(self) -> None:
         self._cancel_bluetooth_callback = bluetooth.async_register_callback(
             self.hass,
             self._bluetooth_callback,
@@ -157,10 +165,36 @@ class CasambiApi:
 
     async def disconnect(self) -> None:
         """Disconnects from the controller and disables automatic reconnect."""
-        if self._cancel_bluetooth_callback:
-            self._cancel_bluetooth_callback()
-            self._cancel_bluetooth_callback = None
-        await self.casa.disconnect()
+        async with self._reconnect_lock:
+            if self._cancel_bluetooth_callback is not None:
+                self._cancel_bluetooth_callback()
+                self._cancel_bluetooth_callback = None
+
+            # This needs to happen before we disconnect.
+            # We don't want to be informed about disconnects initiated by us.
+            self.casa.unregisterDisconnectCallback(self._casa_disconnect)
+
+            await self.casa.disconnect()
+
+    @callback
+    def _casa_disconnect(self) -> None:
+        if self._first_disconnect:
+            self._first_disconnect = False
+            self.conf_entry.async_create_background_task(
+                self.hass, self._delayed_reconnect(), "Delayed reconnect"
+            )
+
+    async def _delayed_reconnect(self) -> None:
+        await asyncio.sleep(30)
+        _LOGGER.debug("Starting delayed reconnect.")
+        device = bluetooth.async_ble_device_from_address(self.hass, self.address)
+        if device is not None:
+            try:
+                await self.try_reconnect()
+            except:
+                _LOGGER.error("Error during first reconnect. This is not unusual.")
+        else:
+            _LOGGER.debug("Skipping reconnect. HA reports device not present.")
 
     async def try_reconnect(self) -> None:
         if self._reconnect_lock.locked():
@@ -183,6 +217,7 @@ class CasambiApi:
             except AttributeError:
                 _LOGGER.debug("Unexpected failure during disconnect.")
             await self.casa.connect(device, self.password)
+            self._first_disconnect = True
 
             if not self._cancel_bluetooth_callback:
                 self._register_bluetooth_callback()
@@ -213,4 +248,6 @@ class CasambiApi:
         change: bluetooth.BluetoothChange,
     ) -> None:
         if not self.casa.connected and service_info.connectable:
-            self.hass.async_create_task(self.try_reconnect())
+            self.conf_entry.async_create_background_task(
+                self.hass, self.try_reconnect(), "Reconnect"
+            )
