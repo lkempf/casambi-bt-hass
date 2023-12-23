@@ -1,4 +1,5 @@
 """Common functionality for entities."""
+
 import logging
 from typing import Final
 
