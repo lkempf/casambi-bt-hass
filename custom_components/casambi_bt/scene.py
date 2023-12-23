@@ -36,11 +36,11 @@ async def async_setup_entry(
 
 class CasambiScene(SceneEntity, CasambiEntity):
     """Defines a Casambi scene entity."""
-    
+
     _attr_should_poll = True
 
     def __init__(self, api: CasambiApi, scene: Scene) -> None:
-        """Initialize a Casambi scene entity."""      
+        """Initialize a Casambi scene entity."""
         super().__init__(api, scene, EntityDescription(key=scene.sceneId, name=scene.name))
 
 
