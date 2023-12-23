@@ -2,8 +2,14 @@
 
 from typing import Final
 
+from homeassistant.const import Platform
+
 DOMAIN: Final = "casambi_bt"
 
-CONF_IMPORT_GROUPS: Final = "import_groups"
+PLATFORMS = [
+    Platform.BINARY_SENSOR,
+    Platform.LIGHT,
+    Platform.SCENE,
+]
 
-IDENTIFIER_UUID: Final = "uuid"
+CONF_IMPORT_GROUPS: Final = "import_groups"

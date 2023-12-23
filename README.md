@@ -1,5 +1,7 @@
 # Home Assistant integration for Casambi using Bluetooth
 
+[![Discord](https://img.shields.io/discord/1186445089317326888)](https://discord.gg/jgZVugfx)
+
 This is a Home Assistant integration for Casambi networks using Bluetooth. Since this is an unofficial implementation of the rather complex undocumented protocol used by the Casambi app there may be issues in networks configured differently to the one used to test this integration.
 Please see the information below on how to report such issues.
 

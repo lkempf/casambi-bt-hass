@@ -1,5 +1,5 @@
+"""Common functionality for entities."""
 import logging
-
 from typing import Final
 
 from CasambiBt import Scene as CasambiScene
@@ -24,6 +24,7 @@ class CasambiEntity(Entity):
         self._api = api
         self._obj = obj
 
+
     @property
     def unique_id(self) -> str:
         """Return the unique ID for this entity."""
@@ -42,7 +43,7 @@ class CasambiEntity(Entity):
             manufacturer="Casambi",
             model="Network",
             identifiers={(DOMAIN, self._api.casa.networkId)},
-            connections={(device_registry.CONNECTION_BLUETOOTH, self._api.address)}
+            connections={(device_registry.CONNECTION_BLUETOOTH, self._api.address)},
         )
 
     @property
