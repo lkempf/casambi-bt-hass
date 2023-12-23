@@ -16,7 +16,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import CasambiApi
 from .const import DOMAIN
-
 from .entities import CasambiEntity
 
 _LOGGER = logging.getLogger(__name__)
