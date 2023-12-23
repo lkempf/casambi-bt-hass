@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Iterable
+from pathlib import Path
 from typing import Callable, Final
 
 import homeassistant.components.bluetooth as bluetooth
@@ -74,7 +75,7 @@ async def async_casmbi_api_setup(
 ) -> CasambiApi | None:
     client = hass.helpers.httpx_client.get_async_client()
     try:
-        casa = Casambi(client)
+        casa = Casambi(client, get_config_dir(hass))
         device = bluetooth.async_ble_device_from_address(
             hass, address, connectable=True
         )
@@ -97,6 +98,11 @@ async def async_casmbi_api_setup(
     api = CasambiApi(casa, hass, address, password)
     return api
 
+
+def get_config_dir(hass: HomeAssistant) -> Path:
+    conf_path = Path(hass.config.config_dir)
+    return conf_path / ".storage" / DOMAIN
+    
 
 class CasambiApi:
     _callback_map: dict[int, list[Callable[[Unit], None]]] = {}
