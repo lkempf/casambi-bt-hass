@@ -28,7 +28,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Casambi Bluetooth from a config entry."""
     api = CasambiApi(hass, entry, entry.data[CONF_ADDRESS], entry.data[CONF_PASSWORD])
     await api.connect()
-    api.register_unit_changed_handler()
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = api
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -41,8 +40,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     casa_api: CasambiApi = hass.data[DOMAIN][entry.entry_id]
-
-    casa_api.casa.unregisterUnitChangedHandler(casa_api._unit_changed_handler)
     await casa_api.disconnect()
 
     if unload_ok:
@@ -68,15 +65,15 @@ class CasambiApi:
         self.conf_entry = conf_entry
         self.address = address
         self.password = password
-        self.casa: Casambi = Casambi(hass.helpers.httpx_client.get_async_client())
+        self.casa: Casambi = Casambi(hass.helpers.httpx_client.get_async_client(), get_config_dir(hass))
 
         self._callback_map: dict[int, list[Callable[[Unit], None]]] = {}
-        self._cancel_bluetooth_callback: Callable[[], None] | None
+        self._cancel_bluetooth_callback: Callable[[], None] | None = None
         self._reconnect_lock = asyncio.Lock()
         self._first_disconnect = True
 
-        self._register_bluetooth_callback()
         self.casa.registerDisconnectCallback(self._casa_disconnect)
+        self.casa.registerUnitChangedHandler(self._unit_changed_handler)
 
     def _register_bluetooth_callback(self) -> None:
         self._cancel_bluetooth_callback = bluetooth.async_register_callback(
@@ -84,10 +81,7 @@ class CasambiApi:
             self._bluetooth_callback,
             {"address": self.address, "connectable": True},
             bluetooth.BluetoothScanningMode.ACTIVE,
-        )
-
-    def register_unit_changed_handler(self):
-        self.casa.registerUnitChangedHandler(self._unit_changed_handler)
+        )        
 
     async def connect(self) -> None:
         try:
@@ -97,6 +91,7 @@ class CasambiApi:
             if not device:
                 raise NetworkNotFoundError
             await self.casa.connect(device, self.password)
+            self._first_disconnect = True
         except BluetoothError as err:
             raise ConfigEntryNotReady("Failed to use bluetooth") from err
         except NetworkNotFoundError as err:
@@ -106,6 +101,8 @@ class CasambiApi:
         except Exception as err:  # pylint: disable=broad-except
             raise ConfigEntryError(f"Unexpected error creating network {self.address}") from err
         
+        # Only register bluetooth callback after connection.
+        # Otherwise we get an immediate callback and attempt two connections at once.
         if not self._cancel_bluetooth_callback:
             self._register_bluetooth_callback()
 
@@ -148,7 +145,11 @@ class CasambiApi:
             # We don't want to be informed about disconnects initiated by us.
             self.casa.unregisterDisconnectCallback(self._casa_disconnect)
 
-            await self.casa.disconnect()
+            try:
+                await self.casa.disconnect()
+            except:
+                _LOGGER.error("Error during disconnect.", exc_info=True)
+            self.casa.unregisterUnitChangedHandler(self._unit_changed_handler)
 
     @callback
     def _casa_disconnect(self) -> None:
@@ -185,9 +186,6 @@ class CasambiApi:
             # We don't actually need to disconnect except to clean up so this should be ok to ignore.
             except AttributeError:
                 _LOGGER.debug("Unexpected failure during disconnect.")
-            await self.casa.connect(device, self.password)
-            self._first_disconnect = True
-
             await self.connect()
         finally:
             self._reconnect_lock.release()
