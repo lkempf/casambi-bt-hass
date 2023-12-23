@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Iterable
+from pathlib import Path
 from typing import Callable, Final
 
 import homeassistant.components.bluetooth as bluetooth
@@ -62,6 +63,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     return unload_ok
 
+
+def get_config_dir(hass: HomeAssistant) -> Path:
+    conf_path = Path(hass.config.config_dir)
+    return conf_path / ".storage" / DOMAIN
+    
 
 class CasambiApi:
     _callback_map: dict[int, list[Callable[[Unit], None]]] = {}
