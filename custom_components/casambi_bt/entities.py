@@ -1,5 +1,6 @@
-import logging
+"""Common functionality for entities."""
 
+import logging
 from typing import Final
 
 from homeassistant.helpers import device_registry
@@ -39,7 +40,7 @@ class CasambiEntity(Entity):
             manufacturer="Casambi",
             model="Network",
             identifiers={(DOMAIN, self._api.casa.networkId)},
-            connections={(device_registry.CONNECTION_BLUETOOTH, self._api.address)}
+            connections={(device_registry.CONNECTION_BLUETOOTH, self._api.address)},
         )
 
     @property

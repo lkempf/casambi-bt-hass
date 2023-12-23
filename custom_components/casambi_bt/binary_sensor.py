@@ -1,9 +1,12 @@
-"""Binary Sensor implementation for Casambi"""
+"""Binary Sensor implementation for Casambi."""
 import logging
 
-from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorDeviceClass, BinarySensorEntityDescription
+from homeassistant.components.binary_sensor import (
+    BinarySensorDeviceClass,
+    BinarySensorEntity,
+    BinarySensorEntityDescription,
+)
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import STATE_OFF, STATE_ON, EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -24,7 +27,7 @@ NETWORK_SENSORS: tuple[BinarySensorEntityDescription, ...] = (
 )
 
 async def async_unload_entry(_hass: HomeAssistant, _entry: ConfigEntry) -> bool:
-    """Support unloading of entry"""
+    """Support unloading of entry."""
     return True
 
 async def async_setup_entry(
@@ -32,7 +35,7 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Setting up binary sensor"""
+    """Set up binary sensor."""
     _LOGGER.debug("Setting up binary sensor entities. config_entry: %s", config_entry)
     api: CasambiApi = hass.data[DOMAIN][config_entry.entry_id]
     binary_sensors = []
@@ -48,8 +51,6 @@ async def async_setup_entry(
     else:
         _LOGGER.debug("No binary sensor entities available.")
 
-    return True
-
 
 class CasambiBinarySensorEntity(BinarySensorEntity, CasambiEntity):
     """Defines a Casambi Binary Sensor Entity."""
@@ -58,13 +59,14 @@ class CasambiBinarySensorEntity(BinarySensorEntity, CasambiEntity):
     _attr_is_on = False
 
     def __init__(self, api: CasambiApi, description: BinarySensorEntityDescription):
+        """Initialize a Casambi Binary Sensor Entity."""
         super().__init__(api, description)
         self.entity_description = description
 
     @property
-    def state(self):
+    def is_on(self) -> bool:
         """Getter for state."""
-        return STATE_ON if self._api.available else STATE_OFF
+        return self._api.available
 
     @property
     def available(self) -> bool:

@@ -20,7 +20,7 @@ from homeassistant.data_entry_flow import FlowResult
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.device_registry import format_mac
 
-from . import get_config_dir
+from . import get_cache_dir
 from .const import CONF_IMPORT_GROUPS, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ async def _validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
     """
     client = hass.helpers.httpx_client.get_async_client()
-    casa = Casambi(client, get_config_dir(hass))
+    casa = Casambi(client, get_cache_dir(hass))
     bt_device = async_ble_device_from_address(
         hass, data[CONF_ADDRESS], connectable=True
     )
@@ -80,7 +80,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_create_entry(title=title, data=data)
 
     async def async_step_bluetooth_error(
-        self, user_input: dict[str, Any] | None = None
+        self, _user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle bluetooth errors.
 
@@ -91,6 +91,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_bluetooth(
         self, discovery_info: BluetoothServiceInfoBleak
     ) -> FlowResult:
+        """Handle bluetooth discovery."""
         self.discovery_info = discovery_info
 
         if not discovery_info.connectable:
@@ -100,8 +101,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._abort_if_unique_id_configured()
 
         _LOGGER.debug(
-            f"Discovery: [{discovery_info.address}] {discovery_info.name} from {discovery_info.source}."
-            f"Advertisement: {repr(discovery_info.advertisement)}."
+            "Discovery: [%s] %s from %s. Advertisement: %s.",
+            discovery_info.address, discovery_info.name, discovery_info.source, discovery_info.advertisement
         )
 
         return self.async_show_form(step_id="user")
@@ -131,7 +132,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             user_input[CONF_ADDRESS] = format_mac(user_input[CONF_ADDRESS]).upper()
 
-            if len(user_input[CONF_ADDRESS]) is 17:
+            if len(user_input[CONF_ADDRESS]) == 17:
                 try:
                     info = await _validate_input(self.hass, user_input)
                 except NetworkNotFoundError:
