@@ -4,6 +4,7 @@
             "already_configured": "Netzwerk ist schon konfiguriert.",
             "bluetooth_error": "Bluetooth scheint nicht richtig zu funktionieren.",
             "cannot_connect": "Verbindung fehlgeschlagen",
+            "invalid_address": "Die Bluetooth MAC Adresse des Netzwerks ist ungültig.",
             "invalid_auth": "Anmeldung ungültig",
             "reauth_successful": "Neuanmeldung war erfolgreich",
             "unknown": "Unerwarteter Fehler"
