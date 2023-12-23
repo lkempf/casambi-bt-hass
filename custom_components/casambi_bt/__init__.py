@@ -71,7 +71,9 @@ class CasambiApi:
         self.conf_entry = conf_entry
         self.address = address
         self.password = password
-        self.casa: Casambi = Casambi(hass.helpers.httpx_client.get_async_client(), get_cache_dir(hass))
+        self.casa: Casambi = Casambi(
+            hass.helpers.httpx_client.get_async_client(), get_cache_dir(hass)
+        )
 
         self._callback_map: dict[int, list[Callable[[Unit], None]]] = {}
         self._cancel_bluetooth_callback: Callable[[], None] | None = None
@@ -102,11 +104,17 @@ class CasambiApi:
         except BluetoothError as err:
             raise ConfigEntryNotReady("Failed to use bluetooth") from err
         except NetworkNotFoundError as err:
-            raise ConfigEntryNotReady(f"Network with address {self.address} wasn't found") from err
+            raise ConfigEntryNotReady(
+                f"Network with address {self.address} wasn't found"
+            ) from err
         except AuthenticationError as err:
-            raise ConfigEntryAuthFailed(f"Failed to authenticate to network {self.address}") from err
+            raise ConfigEntryAuthFailed(
+                f"Failed to authenticate to network {self.address}"
+            ) from err
         except Exception as err:  # pylint: disable=broad-except
-            raise ConfigEntryError(f"Unexpected error creating network {self.address}") from err
+            raise ConfigEntryError(
+                f"Unexpected error creating network {self.address}"
+            ) from err
 
         # Only register bluetooth callback after connection.
         # Otherwise we get an immediate callback and attempt two connections at once.
@@ -168,6 +176,11 @@ class CasambiApi:
 
     async def _delayed_reconnect(self) -> None:
         await asyncio.sleep(30)
+
+        async with self._reconnect_lock:
+            if self.casa.connected:
+                return
+
         _LOGGER.debug("Starting delayed reconnect.")
         device = bluetooth.async_ble_device_from_address(self.hass, self.address)
         if device is not None:
@@ -198,9 +211,7 @@ class CasambiApi:
         finally:
             self._reconnect_lock.release()
 
-    def register_unit_updates(
-        self, unit: Unit, c: Callable[[Unit], None]
-    ) -> None:
+    def register_unit_updates(self, unit: Unit, c: Callable[[Unit], None]) -> None:
         """Register a callback for unit updates.
 
         :param unit: The unit for which changes should be reported.
@@ -208,9 +219,7 @@ class CasambiApi:
         """
         self._callback_map.setdefault(unit.deviceId, []).append(c)
 
-    def unregister_unit_updates(
-        self, unit: Unit, c: Callable[[Unit], None]
-    ) -> None:
+    def unregister_unit_updates(self, unit: Unit, c: Callable[[Unit], None]) -> None:
         """Unregister a callback for unit updates.
 
         :param unit: The unit for which changes should no longer be reported.
