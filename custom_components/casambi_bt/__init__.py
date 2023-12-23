@@ -7,9 +7,10 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Callable, Final
 
-import homeassistant.components.bluetooth as bluetooth
 from CasambiBt import Casambi, Group, Scene, Unit, UnitControlType
 from CasambiBt.errors import AuthenticationError, BluetoothError, NetworkNotFoundError
+
+import homeassistant.components.bluetooth as bluetooth
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD
 from homeassistant.core import HomeAssistant, callback
@@ -54,6 +55,8 @@ def get_config_dir(hass: HomeAssistant) -> Path:
 
 
 class CasambiApi:
+    """Defines a Casambi API."""
+
     def __init__(
         self,
         hass: HomeAssistant,
@@ -191,14 +194,14 @@ class CasambiApi:
             self._reconnect_lock.release()
 
     def register_unit_updates(
-        self, unit: Unit, callback: Callable[[Unit], None]
+        self, unit: Unit, c: Callable[[Unit], None]
     ) -> None:
-        self._callback_map.setdefault(unit.deviceId, []).append(callback)
+        self._callback_map.setdefault(unit.deviceId, []).append(c)
 
     def unregister_unit_updates(
-        self, unit: Unit, callback: Callable[[Unit], None]
+        self, unit: Unit, c: Callable[[Unit], None]
     ) -> None:
-        self._callback_map[unit.deviceId].remove(callback)
+        self._callback_map[unit.deviceId].remove(c)
 
     @callback
     def _unit_changed_handler(self, unit: Unit) -> None:
@@ -211,7 +214,7 @@ class CasambiApi:
     def _bluetooth_callback(
         self,
         service_info: bluetooth.BluetoothServiceInfoBleak,
-        change: bluetooth.BluetoothChange,
+        _change: bluetooth.BluetoothChange,
     ) -> None:
         if not self.casa.connected and service_info.connectable:
             self.conf_entry.async_create_background_task(
