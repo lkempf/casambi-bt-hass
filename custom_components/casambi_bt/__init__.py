@@ -115,7 +115,7 @@ class CasambiApi:
             raise ConfigEntryError(
                 f"Unexpected error creating network {self.address}"
             ) from err
-            
+
         # Only register bluetooth callback after connection.
         # Otherwise we get an immediate callback and attempt two connections at once.
         if not self._cancel_bluetooth_callback:
