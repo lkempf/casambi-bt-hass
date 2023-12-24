@@ -10,6 +10,7 @@
         },
         "error": {
             "cannot_connect": "Failed to connect",
+            "invalid_address": "The bluetooth MAC address of the network is invalid.",
             "invalid_auth": "Invalid authentication",
             "unknown": "Unexpected error"
         },
