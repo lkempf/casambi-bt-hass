@@ -10,7 +10,7 @@
         }
       },
       "reauth_confirm": {
-        "description": "Please verify the network password.",
+        "description": "Please verify your network password.",
         "data": {
           "password": "[%key:common::config_flow::data::password%]"
         }
