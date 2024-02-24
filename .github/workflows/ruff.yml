@@ -3,13 +3,13 @@ name: Build
 on: [push, pull_request]
 
 jobs:
-  PyLint:
+  Ruff:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: ["3.11"]
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v3
       with:
