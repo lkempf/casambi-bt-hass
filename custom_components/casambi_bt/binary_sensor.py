@@ -12,7 +12,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import DOMAIN, CasambiApi
-from .entities import CasambiEntity
+from .entities import CasambiNetworkEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ async def async_setup_entry(
         _LOGGER.debug("No binary sensor entities available.")
 
 
-class CasambiBinarySensorEntity(BinarySensorEntity, CasambiEntity):
+class CasambiBinarySensorEntity(BinarySensorEntity, CasambiNetworkEntity):
     """Defines a Casambi Binary Sensor Entity."""
 
     entity_description: BinarySensorEntityDescription
@@ -60,7 +60,7 @@ class CasambiBinarySensorEntity(BinarySensorEntity, CasambiEntity):
 
     def __init__(self, api: CasambiApi, description: BinarySensorEntityDescription):
         """Initialize a Casambi Binary Sensor Entity."""
-        super().__init__(api, description)
+        super().__init__(api=api, description=description)
         self.entity_description = description
 
     @property
