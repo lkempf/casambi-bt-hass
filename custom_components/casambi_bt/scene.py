@@ -16,7 +16,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import CasambiApi
 from .const import DOMAIN
-from .entities import CasambiEntity
+from .entities import CasambiNetworkEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,14 +33,14 @@ async def async_setup_entry(
     async_add_entities(scenes)
 
 
-class CasambiScene(SceneEntity, CasambiEntity):
+class CasambiScene(SceneEntity, CasambiNetworkEntity):
     """Defines a Casambi scene entity."""
 
     _attr_should_poll = True
 
     def __init__(self, api: CasambiApi, scene: Scene) -> None:
         """Initialize a Casambi scene entity."""
-        super().__init__(api, scene, EntityDescription(key=scene.sceneId, name=scene.name))
+        super().__init__(api=api, description=EntityDescription(key=scene.sceneId, name=scene.name), obj=scene)
 
 
     async def async_activate(self, **kwargs: Any) -> None:

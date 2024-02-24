@@ -1,7 +1,7 @@
 """Common functionality for entities."""
 
 import logging
-from typing import Final
+from typing import Any, Final
 
 from CasambiBt import Scene as CasambiScene
 
@@ -13,13 +13,13 @@ from . import DOMAIN, CasambiApi
 _LOGGER: Final = logging.getLogger(__name__)
 
 
-class CasambiEntity(Entity):
-    """Defines a Casambi Entity."""
+class CasambiNetworkEntity(Entity):
+    """Defines a Casambi Entity belonging to the network device."""
 
     entity_description: EntityDescription
     _attr_has_entity_name = True
 
-    def __init__(self, api: CasambiApi, obj: CasambiScene, description: EntityDescription):
+    def __init__(self, api: CasambiApi, description: EntityDescription, obj: Any = None):
         """Initialize Casambi Entity."""
         self.entity_description = description
         self._api = api
