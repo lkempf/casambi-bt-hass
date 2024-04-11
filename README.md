@@ -22,13 +22,10 @@ Place the `casambi_bt` folder in the `custom_components` folder.
 Add this repository as custom repository in the HACS store (HACS -> integrations -> custom repositories):
 
 1. Setup HACS https://hacs.xyz/
-2. Go to integrations section.
-3. Click on the 3 dots in the top right corner.
-4. Select "Custom repositories"
-5. Add the URL to the repository.
-6. Select the integration category.
-7. Click the "ADD" button.
-8. Search for the Casambi **Bluetooth** integration and install it.
+2. Select HACS from the left sidebar
+3. Search for `Casambi **Bluetooth**` in the searchbar at the top and select it. If you can't find it you might have to add this repository as a custom repository.
+4. Click the Download button at the bottom right
+5. Restart Home Assistant
 
 ## Features
 
