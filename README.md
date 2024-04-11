@@ -23,7 +23,7 @@ Add this repository as custom repository in the HACS store (HACS -> integrations
 
 1. Setup HACS https://hacs.xyz/
 2. Select HACS from the left sidebar
-3. Search for `Casambi **Bluetooth**` in the searchbar at the top and select it
+3. Search for `Casambi **Bluetooth**` in the searchbar at the top and select it. If you can't find it you might have to add this repository as a custom repository.
 4. Click the Download button at the bottom right
 5. Restart Home Assistant
 
