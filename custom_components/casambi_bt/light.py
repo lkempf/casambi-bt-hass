@@ -96,9 +96,8 @@ class CasambiLight(LightEntity, metaclass=ABCMeta):
             supported.add(COLOR_MODE_RGBW)
         elif UnitControlType.RGB in unit_modes:
             supported.add(COLOR_MODE_RGB)
-        if UnitControlType.DIMMER in unit_modes:
+        elif UnitControlType.DIMMER in unit_modes:
             supported.add(COLOR_MODE_BRIGHTNESS)
-            supported.add(COLOR_MODE_ONOFF)
         elif UnitControlType.ONOFF in unit_modes:
             supported.add(COLOR_MODE_ONOFF)
         if UnitControlType.TEMPERATURE in unit_modes:
