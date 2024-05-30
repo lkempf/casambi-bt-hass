@@ -19,6 +19,7 @@ from homeassistant.exceptions import (
     ConfigEntryError,
     ConfigEntryNotReady,
 )
+from homeassistant.helpers.httpx_client import get_async_client
 
 from .const import DOMAIN, PLATFORMS
 
@@ -72,7 +73,7 @@ class CasambiApi:
         self.address = address
         self.password = password
         self.casa: Casambi = Casambi(
-            hass.helpers.httpx_client.get_async_client(), get_cache_dir(hass)
+            get_async_client(hass), get_cache_dir(hass)
         )
 
         self._callback_map: dict[int, list[Callable[[Unit], None]]] = {}
