@@ -335,7 +335,7 @@ class CasambiLightGroup(CasambiLight):
         """Return the color temperature in Kelvin of the first fitting unit of the group."""
         for unit in self._unit_map.values():
             if unit.unitType.get_control(UnitControlType.TEMPERATURE):
-                return (*unit.state.rgb, unit.state.white)  # type: ignore[return-value]
+                return unit.state.temperature
         return None
 
     @property
