@@ -14,6 +14,7 @@ from homeassistant.components.light import (
     ATTR_COLOR_TEMP_KELVIN,
     ATTR_RGB_COLOR,
     ATTR_RGBW_COLOR,
+    ATTR_XY_COLOR,
     ColorMode,
     LightEntity,
     LightEntityFeature,
@@ -97,6 +98,8 @@ class CasambiLight(LightEntity, metaclass=ABCMeta):
             supported.add(ColorMode.COLOR_MODE_ONOFF)
         if UnitControlType.TEMPERATURE in unit_modes:
             supported.add(ColorMode.COLOR_MODE_COLOR_TEMP)
+        if UnitControlType.XY in unit_modes:
+            supported.add(ColorMode.COLOR_MODE_XY)
 
         if len(supported) == 0:
             supported.add(ColorMode.COLOR_MODE_UNKNOWN)
@@ -115,6 +118,8 @@ class CasambiLight(LightEntity, metaclass=ABCMeta):
                 return ColorMode.COLOR_MODE_BRIGHTNESS
             if ColorMode.COLOR_MODE_ONOFF in modes:
                 return ColorMode.COLOR_MODE_ONOFF
+            if ColorMode.XY in modes:
+                return ColorMode.COLOR_MODE_XY
         return ColorMode.COLOR_MODE_UNKNOWN
 
     async def async_turn_off(self, **kwargs: Any) -> None:
@@ -188,6 +193,12 @@ class CasambiLightUnit(CasambiLight):
         return unit.state.temperature
 
     @property
+    def xy_color(self) -> tuple[float, float] | None:
+        """Return the XY color value."""
+        unit = cast(Unit, self._obj)
+        return unit.state.xy
+
+    @property
     def available(self) -> bool:
         """Return True if the unit is available."""
         unit = cast(Unit, self._obj)
@@ -231,12 +242,19 @@ class CasambiLightUnit(CasambiLight):
         if ATTR_RGBW_COLOR in kwargs:
             state.rgb = kwargs[ATTR_RGBW_COLOR][:3]
             state.white = kwargs[ATTR_RGBW_COLOR][3]
+            state.colorsource = 1
             set_state = True
         if ATTR_RGB_COLOR in kwargs:
             state.rgb = kwargs[ATTR_RGB_COLOR]
+            state.colorsource = 1
             set_state = True
         if ATTR_COLOR_TEMP_KELVIN in kwargs:
             state.temperature = kwargs[ATTR_COLOR_TEMP_KELVIN]
+            state.colorsource = 0
+            set_state = True
+        if ATTR_XY_COLOR in kwargs:
+            state.xy = kwargs[ATTR_XY_COLOR]
+            state.colorsource = 2
             set_state = True
 
         if set_state:
@@ -334,6 +352,14 @@ class CasambiLightGroup(CasambiLight):
         for unit in self._unit_map.values():
             if unit.unitType.get_control(UnitControlType.TEMPERATURE):
                 return unit.state.temperature
+        return None
+
+    @property
+    def xy_color(self) -> tuple[float, float] | None:
+        """Return the XY color value of the first fitting unit of the group."""
+        for unit in self._unit_map.values():
+            if unit.unitType.get_control(UnitControlType.XY):
+                return unit.state.xy
         return None
 
     @property
