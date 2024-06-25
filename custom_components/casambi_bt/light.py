@@ -14,12 +14,6 @@ from homeassistant.components.light import (
     ATTR_COLOR_TEMP_KELVIN,
     ATTR_RGB_COLOR,
     ATTR_RGBW_COLOR,
-    COLOR_MODE_BRIGHTNESS,
-    COLOR_MODE_COLOR_TEMP,
-    COLOR_MODE_ONOFF,
-    COLOR_MODE_RGB,
-    COLOR_MODE_RGBW,
-    COLOR_MODE_UNKNOWN,
     ColorMode,
     LightEntity,
     LightEntityFeature,
@@ -77,7 +71,9 @@ class CasambiLight(LightEntity, metaclass=ABCMeta):
         self._attr_supported_features = LightEntityFeature(0)
         self._attr_should_poll = False
 
-        self._attr_color_mode = self._mode_helper(self.supported_color_modes)
+        self._attr_ColorMode.COLOR_MODE = self._mode_helper(
+            self.supported_ColorMode.COLOR_MODEs
+        )
 
     @property
     def available(self) -> bool:
@@ -93,35 +89,35 @@ class CasambiLight(LightEntity, metaclass=ABCMeta):
         unit_modes = [uc.type for uc in unit.unitType.controls]
 
         if UnitControlType.RGB in unit_modes and UnitControlType.WHITE in unit_modes:
-            supported.add(COLOR_MODE_RGBW)
+            supported.add(ColorMode.COLOR_MODE_RGBW)
         elif UnitControlType.RGB in unit_modes:
-            supported.add(COLOR_MODE_RGB)
+            supported.add(ColorMode.COLOR_MODE_RGB)
         if UnitControlType.DIMMER in unit_modes:
-            supported.add(COLOR_MODE_BRIGHTNESS)
-            supported.add(COLOR_MODE_ONOFF)
+            supported.add(ColorMode.COLOR_MODE_BRIGHTNESS)
+            supported.add(ColorMode.COLOR_MODE_ONOFF)
         elif UnitControlType.ONOFF in unit_modes:
-            supported.add(COLOR_MODE_ONOFF)
+            supported.add(ColorMode.COLOR_MODE_ONOFF)
         if UnitControlType.TEMPERATURE in unit_modes:
-            supported.add(COLOR_MODE_COLOR_TEMP)
+            supported.add(ColorMode.COLOR_MODE_COLOR_TEMP)
 
         if len(supported) == 0:
-            supported.add(COLOR_MODE_UNKNOWN)
+            supported.add(ColorMode.COLOR_MODE_UNKNOWN)
 
         return supported
 
     def _mode_helper(self, modes: set[ColorMode] | set[str] | None) -> str:
         if modes:
-            if COLOR_MODE_RGBW in modes:
-                return COLOR_MODE_RGBW
-            if COLOR_MODE_RGB in modes:
-                return COLOR_MODE_RGB
-            if COLOR_MODE_COLOR_TEMP in modes:
-                return COLOR_MODE_COLOR_TEMP
-            if COLOR_MODE_BRIGHTNESS in modes:
-                return COLOR_MODE_BRIGHTNESS
-            if COLOR_MODE_ONOFF in modes:
-                return COLOR_MODE_ONOFF
-        return COLOR_MODE_UNKNOWN
+            if ColorMode.COLOR_MODE_RGBW in modes:
+                return ColorMode.COLOR_MODE_RGBW
+            if ColorMode.COLOR_MODE_RGB in modes:
+                return ColorMode.COLOR_MODE_RGB
+            if ColorMode.COLOR_MODE_COLOR_TEMP in modes:
+                return ColorMode.COLOR_MODE_COLOR_TEMP
+            if ColorMode.COLOR_MODE_BRIGHTNESS in modes:
+                return ColorMode.COLOR_MODE_BRIGHTNESS
+            if ColorMode.COLOR_MODE_ONOFF in modes:
+                return ColorMode.COLOR_MODE_ONOFF
+        return ColorMode.COLOR_MODE_UNKNOWN
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the entity of."""
@@ -133,7 +129,7 @@ class CasambiLightUnit(CasambiLight):
 
     def __init__(self, api: CasambiApi, unit: Unit) -> None:
         """Initialize a Casambi light entity."""
-        self._attr_supported_color_modes = self._capabilities_helper(unit)
+        self._attr_supported_ColorMode.COLOR_MODEs = self._capabilities_helper(unit)
         self._attr_name = None
         self._attr_has_entity_name = True
 
@@ -254,7 +250,7 @@ class CasambiLightUnit(CasambiLight):
         """Turn off the unit."""
         # HACK: Try to get lights only supporting ONOFF to turn off.
         # SetLevel doesn't seem to work for unknown reasons.
-        if self.color_mode == COLOR_MODE_ONOFF:
+        if self.ColorMode.COLOR_MODE == ColorMode.COLOR_MODE_ONOFF:
             unit = cast(Unit, self._obj)
             await self._api.casa._send(
                 unit, bytes(unit.unitType.stateLength), _operation.OpCode.SetState
@@ -281,12 +277,12 @@ class CasambiLightGroup(CasambiLight):
         #  - How do we determine min and max temperature? Is it the union or intersection of the intervals?
         #  - How does the SetTemperature opcode work (for casambi-bt)?
         #    We can't really scale the temperature since we don't have a min or max.
-        if COLOR_MODE_COLOR_TEMP in supported_modes:
-            supported_modes.remove(COLOR_MODE_COLOR_TEMP)
+        if ColorMode.COLOR_MODE_COLOR_TEMP in supported_modes:
+            supported_modes.remove(ColorMode.COLOR_MODE_COLOR_TEMP)
 
         if len(supported_modes) == 0:
-            supported_modes.add(COLOR_MODE_UNKNOWN)
-        self._attr_supported_color_modes = supported_modes
+            supported_modes.add(ColorMode.COLOR_MODE_UNKNOWN)
+        self._attr_supported_ColorMode.COLOR_MODEs = supported_modes
         self._attr_name = group.name
         super().__init__(api, group)
 
