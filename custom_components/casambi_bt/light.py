@@ -71,9 +71,7 @@ class CasambiLight(LightEntity, metaclass=ABCMeta):
         self._attr_supported_features = LightEntityFeature(0)
         self._attr_should_poll = False
 
-        self._attr_ColorMode.COLOR_MODE = self._mode_helper(
-            self.supported_ColorMode.COLOR_MODEs
-        )
+        self._attr_color_mode = self._mode_helper(self.supported_color_modes)
 
     @property
     def available(self) -> bool:
@@ -129,7 +127,7 @@ class CasambiLightUnit(CasambiLight):
 
     def __init__(self, api: CasambiApi, unit: Unit) -> None:
         """Initialize a Casambi light entity."""
-        self._attr_supported_ColorMode.COLOR_MODEs = self._capabilities_helper(unit)
+        self._attr_supported_color_modes = self._capabilities_helper(unit)
         self._attr_name = None
         self._attr_has_entity_name = True
 
@@ -250,7 +248,7 @@ class CasambiLightUnit(CasambiLight):
         """Turn off the unit."""
         # HACK: Try to get lights only supporting ONOFF to turn off.
         # SetLevel doesn't seem to work for unknown reasons.
-        if self.ColorMode.COLOR_MODE == ColorMode.COLOR_MODE_ONOFF:
+        if self.color_mode == ColorMode.COLOR_MODE_ONOFF:
             unit = cast(Unit, self._obj)
             await self._api.casa._send(
                 unit, bytes(unit.unitType.stateLength), _operation.OpCode.SetState
@@ -282,7 +280,7 @@ class CasambiLightGroup(CasambiLight):
 
         if len(supported_modes) == 0:
             supported_modes.add(ColorMode.COLOR_MODE_UNKNOWN)
-        self._attr_supported_ColorMode.COLOR_MODEs = supported_modes
+        self._attr_supported_color_modes = supported_modes
         self._attr_name = group.name
         super().__init__(api, group)
 
