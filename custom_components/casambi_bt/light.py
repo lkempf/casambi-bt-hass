@@ -88,39 +88,40 @@ class CasambiLight(LightEntity, metaclass=ABCMeta):
         unit_modes = [uc.type for uc in unit.unitType.controls]
 
         if UnitControlType.RGB in unit_modes and UnitControlType.WHITE in unit_modes:
-            supported.add(ColorMode.COLOR_MODE_RGBW)
+            supported.add(ColorMode.RGBW)
         elif UnitControlType.RGB in unit_modes:
-            supported.add(ColorMode.COLOR_MODE_RGB)
-        if UnitControlType.DIMMER in unit_modes:
-            supported.add(ColorMode.COLOR_MODE_BRIGHTNESS)
-            supported.add(ColorMode.COLOR_MODE_ONOFF)
-        elif UnitControlType.ONOFF in unit_modes:
-            supported.add(ColorMode.COLOR_MODE_ONOFF)
+            supported.add(ColorMode.RGB)
         if UnitControlType.TEMPERATURE in unit_modes:
-            supported.add(ColorMode.COLOR_MODE_COLOR_TEMP)
+            supported.add(ColorMode.COLOR_TEMP)
         if UnitControlType.XY in unit_modes:
-            supported.add(ColorMode.COLOR_MODE_XY)
+            supported.add(ColorMode.XY)
 
         if len(supported) == 0:
-            supported.add(ColorMode.COLOR_MODE_UNKNOWN)
+            if UnitControlType.DIMMER in unit_modes:
+                supported.add(ColorMode.BRIGHTNESS)
+            elif UnitControlType.ONOFF in unit_modes:
+                supported.add(ColorMode.ONOFF)
+
+        if len(supported) == 0:
+            supported.add(ColorMode.UNKNOWN)
 
         return supported
 
     def _mode_helper(self, modes: set[ColorMode] | set[str] | None) -> str:
         if modes:
-            if ColorMode.COLOR_MODE_RGBW in modes:
-                return ColorMode.COLOR_MODE_RGBW
-            if ColorMode.COLOR_MODE_RGB in modes:
-                return ColorMode.COLOR_MODE_RGB
-            if ColorMode.COLOR_MODE_COLOR_TEMP in modes:
-                return ColorMode.COLOR_MODE_COLOR_TEMP
-            if ColorMode.COLOR_MODE_BRIGHTNESS in modes:
-                return ColorMode.COLOR_MODE_BRIGHTNESS
-            if ColorMode.COLOR_MODE_ONOFF in modes:
-                return ColorMode.COLOR_MODE_ONOFF
+            if ColorMode.RGBW in modes:
+                return ColorMode.RGBW
+            if ColorMode.RGB in modes:
+                return ColorMode.RGB
             if ColorMode.XY in modes:
-                return ColorMode.COLOR_MODE_XY
-        return ColorMode.COLOR_MODE_UNKNOWN
+                return ColorMode.XY
+            if ColorMode.COLOR_TEMP in modes:
+                return ColorMode.COLOR_TEMP
+            if ColorMode.BRIGHTNESS in modes:
+                return ColorMode.BRIGHTNESS
+            if ColorMode.ONOFF in modes:
+                return ColorMode.ONOFF
+        return ColorMode.UNKNOWN
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the entity of."""
@@ -266,7 +267,7 @@ class CasambiLightUnit(CasambiLight):
         """Turn off the unit."""
         # HACK: Try to get lights only supporting ONOFF to turn off.
         # SetLevel doesn't seem to work for unknown reasons.
-        if self.color_mode == ColorMode.COLOR_MODE_ONOFF:
+        if self.color_mode == ColorMode.ONOFF:
             unit = cast(Unit, self._obj)
             await self._api.casa._send(
                 unit, bytes(unit.unitType.stateLength), _operation.OpCode.SetState
@@ -293,11 +294,11 @@ class CasambiLightGroup(CasambiLight):
         #  - How do we determine min and max temperature? Is it the union or intersection of the intervals?
         #  - How does the SetTemperature opcode work (for casambi-bt)?
         #    We can't really scale the temperature since we don't have a min or max.
-        if ColorMode.COLOR_MODE_COLOR_TEMP in supported_modes:
-            supported_modes.remove(ColorMode.COLOR_MODE_COLOR_TEMP)
+        if ColorMode.COLOR_TEMP in supported_modes:
+            supported_modes.remove(ColorMode.COLOR_TEMP)
 
         if len(supported_modes) == 0:
-            supported_modes.add(ColorMode.COLOR_MODE_UNKNOWN)
+            supported_modes.add(ColorMode.UNKNOWN)
         self._attr_supported_color_modes = supported_modes
         self._attr_name = group.name
         super().__init__(api, group)
