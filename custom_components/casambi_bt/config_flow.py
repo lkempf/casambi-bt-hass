@@ -117,7 +117,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         _LOGGER.debug(
             "Discovery: [%s] %s from %s. Advertisement: %s.",
-            discovery_info.address, discovery_info.name, discovery_info.source, discovery_info.advertisement
+            discovery_info.address,
+            discovery_info.name,
+            discovery_info.source,
+            discovery_info.advertisement,
         )
 
         return self.async_show_form(step_id="user")
@@ -127,9 +130,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Handle entry of network information and attempt to connect."""
 
-        suggested_input = {
-            CONF_ADDRESS: vol.UNDEFINED if not self.discovery_info else self.discovery_info.address,
-        }
+        suggested_input = {}
+        if self.discovery_info:
+            suggested_input[CONF_ADDRESS] = self.discovery_info.address
 
         if async_scanner_count(self.hass, connectable=True) < 1:
             return self.async_show_form(step_id="bluetooth_error")
