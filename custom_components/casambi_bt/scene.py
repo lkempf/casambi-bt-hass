@@ -36,12 +36,14 @@ async def async_setup_entry(
 class CasambiScene(SceneEntity, CasambiNetworkEntity):
     """Defines a Casambi scene entity."""
 
-    _attr_should_poll = True
-
     def __init__(self, api: CasambiApi, scene: Scene) -> None:
         """Initialize a Casambi scene entity."""
-        super().__init__(api=api, description=EntityDescription(key=scene.sceneId, name=scene.name), obj=scene)
-
+        self._obj: Scene
+        super().__init__(
+            api=api,
+            description=EntityDescription(key=str(scene.sceneId), name=scene.name),
+            obj=scene,
+        )
 
     async def async_activate(self, **kwargs: Any) -> None:
         """Activate a scene."""
