@@ -6,11 +6,11 @@ from abc import ABCMeta
 import logging
 from typing import cast
 
-from CasambiBt import Group, Unit, UnitControlType, UnitState
+from CasambiBt import Group, Unit, UnitControlType
 
 from homeassistant.components.number import NumberDeviceClass, NumberEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import CasambiApi
