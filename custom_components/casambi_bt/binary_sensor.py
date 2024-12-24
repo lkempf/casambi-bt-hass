@@ -1,4 +1,5 @@
 """Binary Sensor implementation for Casambi."""
+
 import logging
 
 from homeassistant.components.binary_sensor import (
@@ -26,9 +27,11 @@ NETWORK_SENSORS: tuple[BinarySensorEntityDescription, ...] = (
     ),
 )
 
+
 async def async_unload_entry(_hass: HomeAssistant, _entry: ConfigEntry) -> bool:
     """Support unloading of entry."""
     return True
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -55,13 +58,9 @@ async def async_setup_entry(
 class CasambiBinarySensorEntity(BinarySensorEntity, CasambiNetworkEntity):
     """Defines a Casambi Binary Sensor Entity."""
 
-    entity_description: BinarySensorEntityDescription
-    _attr_is_on = False
-
     def __init__(self, api: CasambiApi, description: BinarySensorEntityDescription):
         """Initialize a Casambi Binary Sensor Entity."""
         super().__init__(api=api, description=description)
-        self.entity_description = description
 
     @property
     def is_on(self) -> bool:
