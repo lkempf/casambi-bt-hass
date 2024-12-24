@@ -6,10 +6,6 @@ from homeassistant.const import Platform
 
 DOMAIN: Final = "casambi_bt"
 
-PLATFORMS = [
-    Platform.BINARY_SENSOR,
-    Platform.LIGHT,
-    Platform.SCENE,
-]
+PLATFORMS = [Platform.BINARY_SENSOR, Platform.LIGHT, Platform.SCENE, Platform.NUMBER]
 
 CONF_IMPORT_GROUPS: Final = "import_groups"

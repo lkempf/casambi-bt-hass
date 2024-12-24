@@ -1,4 +1,5 @@
 """The Casambi Bluetooth integration."""
+
 from __future__ import annotations
 
 import asyncio
@@ -72,9 +73,7 @@ class CasambiApi:
         self.conf_entry = conf_entry
         self.address = address
         self.password = password
-        self.casa: Casambi = Casambi(
-            get_async_client(hass), get_cache_dir(hass)
-        )
+        self.casa: Casambi = Casambi(get_async_client(hass), get_cache_dir(hass))
 
         self._callback_map: dict[int, list[Callable[[Unit], None]]] = {}
         self._cancel_bluetooth_callback: Callable[[], None] | None = None
@@ -99,7 +98,7 @@ class CasambiApi:
                 self.hass, self.address, connectable=True
             )
             if not device:
-                raise NetworkNotFoundError
+                raise NetworkNotFoundError  # noqa: TRY301
             await self.casa.connect(device, self.password)
             self._first_disconnect = True
         except BluetoothError as err:
@@ -188,7 +187,7 @@ class CasambiApi:
             try:
                 await self.try_reconnect()
             except Exception:
-                _LOGGER.error("Error during first reconnect. This is not unusual.")
+                _LOGGER.exception("Error during reconnect. This is not unusual.")
         else:
             _LOGGER.debug("Skipping reconnect. HA reports device not present.")
 
