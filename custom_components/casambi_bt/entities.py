@@ -71,10 +71,9 @@ class CasambiNetworkEntity(CasambiEntity, metaclass=ABCMeta):
             if isinstance(self._obj, CasambiScene):
                 name += "-scene"
             elif isinstance(self._obj, CasambiGroup):
-                desc = cast(TypedEntityDescription, self.entity_description)
-                name += f"-group-{desc.entity_type}"
+                name += "-group"
         name += f"-{self.entity_description.key}"
-        return name.lower()
+        return name
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -155,7 +154,7 @@ class CasambiUnitEntity(CasambiEntity, metaclass=ABCMeta):
         """Return an unique identifier for the unit."""
         unit = cast(CasambiUnit, self._obj)
         desc = cast(TypedEntityDescription, self.entity_description)
-        return f"{self._api.casa.networkId}-unit-{unit.uuid}-{desc}"
+        return f"{self._api.casa.networkId}-unit-{unit.uuid}-{desc.entity_type}"
 
     @property
     def device_info(self) -> DeviceInfo:
