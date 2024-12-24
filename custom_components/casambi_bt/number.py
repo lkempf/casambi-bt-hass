@@ -92,8 +92,7 @@ class CasambiVerticalNumberUnit(CasambiVerticalNumber, CasambiUnitEntity):
         unit = cast(Unit, self._obj)
         if unit.state is not None and unit.state.vertical is not None:
             return float(unit.state.vertical)
-        else:
-            return None
+        return None
 
 
 class CasambiVerticalNumberGroup(CasambiVerticalNumber, CasambiNetworkEntity):

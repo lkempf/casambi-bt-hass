@@ -153,8 +153,7 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
         unit = cast(Unit, self._obj)
         if unit.state is not None:
             return unit.state.dimmer
-        else:
-            return None
+        return None
 
     @property
     def rgb_color(self) -> tuple[int, int, int] | None:
@@ -162,8 +161,7 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
         unit = cast(Unit, self._obj)
         if unit.state is not None:
             return unit.state.rgb
-        else:
-            return None
+        return None
 
     @property
     def rgbw_color(self) -> tuple[int, int, int, int] | None:
@@ -175,8 +173,7 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
             and unit.state.white is not None
         ):
             return (*unit.state.rgb, unit.state.white)
-        else:
-            return None
+        return None
 
     @property
     def color_temp_kelvin(self) -> int | None:
@@ -184,8 +181,7 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
         unit = cast(Unit, self._obj)
         if unit.state is not None:
             return unit.state.temperature
-        else:
-            return None
+        return None
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the unit."""

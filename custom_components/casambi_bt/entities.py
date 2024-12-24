@@ -100,7 +100,9 @@ class CasambiNetworkGroup(CasambiNetworkEntity, metaclass=ABCMeta):
         """Initialize Casambi Entity."""
         super().__init__(api, description, obj)
 
-        self._unit_map = dict(zip([u.deviceId for u in obj.units], obj.units))
+        self._unit_map = dict(
+            zip([u.deviceId for u in obj.units], obj.units, strict=True)
+        )
 
     @property
     def available(self) -> bool:

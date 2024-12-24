@@ -1,4 +1,5 @@
 """The Casambi Bluetooth integration."""
+
 from __future__ import annotations
 
 import asyncio
@@ -72,9 +73,7 @@ class CasambiApi:
         self.conf_entry = conf_entry
         self.address = address
         self.password = password
-        self.casa: Casambi = Casambi(
-            get_async_client(hass), get_cache_dir(hass)
-        )
+        self.casa: Casambi = Casambi(get_async_client(hass), get_cache_dir(hass))
 
         self._callback_map: dict[int, list[Callable[[Unit], None]]] = {}
         self._cancel_bluetooth_callback: Callable[[], None] | None = None
