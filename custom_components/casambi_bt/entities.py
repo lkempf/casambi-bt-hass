@@ -125,7 +125,7 @@ class CasambiNetworkGroup(CasambiNetworkEntity, metaclass=ABCMeta):
             own_unit = self._unit_map[unit.deviceId]
             # This update doesn't have a state.
             # This can happen if the unit isn't online so only look at that part.
-            own_unit._online = unit.online
+            own_unit._online = unit.online  # noqa: SLF001
         return super()._change_callback(unit)
 
     async def async_added_to_hass(self) -> None:
@@ -185,7 +185,7 @@ class CasambiUnitEntity(CasambiEntity, metaclass=ABCMeta):
             own_unit = cast(CasambiUnit, self._obj)
             # This update doesn't have a state.
             # This can happen if the unit isn't online so only look at that part.
-            own_unit._online = unit.online
+            own_unit._online = unit.online  # noqa: SLF001
         return super()._change_callback(unit)
 
     async def async_added_to_hass(self) -> None:

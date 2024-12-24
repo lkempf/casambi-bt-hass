@@ -233,7 +233,7 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
         # SetLevel doesn't seem to work for unknown reasons.
         if self.color_mode == ColorMode.ONOFF:
             unit = cast(Unit, self._obj)
-            await self._api.casa._send(
+            await self._api.casa._send(  # noqa: SLF001
                 unit, bytes(unit.unitType.stateLength), _operation.OpCode.SetState
             )
         else:
