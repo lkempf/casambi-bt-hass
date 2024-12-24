@@ -98,7 +98,7 @@ class CasambiApi:
                 self.hass, self.address, connectable=True
             )
             if not device:
-                raise NetworkNotFoundError
+                raise NetworkNotFoundError  # noqa: TRY301
             await self.casa.connect(device, self.password)
             self._first_disconnect = True
         except BluetoothError as err:
@@ -187,7 +187,7 @@ class CasambiApi:
             try:
                 await self.try_reconnect()
             except Exception:
-                _LOGGER.error("Error during first reconnect. This is not unusual.")
+                _LOGGER.exception("Error during reconnect. This is not unusual.")
         else:
             _LOGGER.debug("Skipping reconnect. HA reports device not present.")
 
