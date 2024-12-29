@@ -80,9 +80,6 @@ class CasambiApi:
         self._reconnect_lock = asyncio.Lock()
         self._first_disconnect = True
 
-        self.casa.registerDisconnectCallback(self._casa_disconnect)
-        self.casa.registerUnitChangedHandler(self._unit_changed_handler)
-
     def _register_bluetooth_callback(self) -> None:
         self._cancel_bluetooth_callback = bluetooth.async_register_callback(
             self.hass,
@@ -99,6 +96,10 @@ class CasambiApi:
             )
             if not device:
                 raise NetworkNotFoundError  # noqa: TRY301
+
+            self.casa.registerDisconnectCallback(self._casa_disconnect)
+            self.casa.registerUnitChangedHandler(self._unit_changed_handler)
+
             await self.casa.connect(device, self.password)
             self._first_disconnect = True
         except BluetoothError as err:
