@@ -21,7 +21,7 @@ from . import CasambiApi
 from .const import CONF_IMPORT_GROUPS, DOMAIN
 from .entities import (
     CasambiEntity,
-    CasambiNetworkEntity,
+    CasambiNetworkGroup,
     CasambiUnitEntity,
     TypedEntityDescription,
 )
@@ -105,7 +105,7 @@ class CasambiVerticalNumberUnit(CasambiVerticalNumber, CasambiUnitEntity):
         return None
 
 
-class CasambiVerticalNumberGroup(CasambiVerticalNumber, CasambiNetworkEntity):
+class CasambiVerticalNumberGroup(CasambiVerticalNumber, CasambiNetworkGroup):
     """Defines a Casambi vertical entity group."""
 
     def __init__(self, api: CasambiApi, group: Group) -> None:
@@ -114,4 +114,18 @@ class CasambiVerticalNumberGroup(CasambiVerticalNumber, CasambiNetworkEntity):
         desc = TypedNumberEntityDescription(
             key=str(group.groudId), name=group.name, entity_type="vertical"
         )
+
+        self._obj: Group
         super().__init__(api, desc, group)
+
+    @property
+    def native_value(self) -> float | None:
+        """Get the average vertical value of the group."""
+        group = cast(Group, self._obj)
+        values = [
+            float(unit.state.vertical) for unit in group.units
+            if unit.state is not None and unit.state.vertical is not None
+        ]
+        if values:
+            return sum(values) / len(values)
+        return None
