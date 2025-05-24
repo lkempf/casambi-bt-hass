@@ -8,7 +8,11 @@ from typing import cast
 
 from CasambiBt import Group, Unit, UnitControlType
 
-from homeassistant.components.number import NumberDeviceClass, NumberEntity
+from homeassistant.components.number import (
+    NumberDeviceClass,
+    NumberEntity,
+    NumberEntityDescription,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -17,7 +21,7 @@ from . import CasambiApi
 from .const import CONF_IMPORT_GROUPS, DOMAIN
 from .entities import (
     CasambiEntity,
-    CasambiNetworkEntity,
+    CasambiNetworkGroup,
     CasambiUnitEntity,
     TypedEntityDescription,
 )
@@ -52,6 +56,10 @@ async def async_setup_entry(
     async_add_entities(light_entities + group_entities)
 
 
+class TypedNumberEntityDescription(TypedEntityDescription, NumberEntityDescription):
+    """Describes a CasambiVerticalNumberUnit."""
+
+
 class CasambiVerticalNumber(CasambiEntity, NumberEntity, metaclass=ABCMeta):
     """Defines a Casambi vertical entity base class.
 
@@ -59,7 +67,9 @@ class CasambiVerticalNumber(CasambiEntity, NumberEntity, metaclass=ABCMeta):
     """
 
     def __init__(
-        self, api: CasambiApi, description: TypedEntityDescription, obj: Group | Unit
+        self, api: CasambiApi,
+        description: TypedNumberEntityDescription,
+        obj: Group | Unit,
     ) -> None:
         """Initialize a Casambi vertical entity base class."""
 
@@ -81,7 +91,7 @@ class CasambiVerticalNumberUnit(CasambiVerticalNumber, CasambiUnitEntity):
     def __init__(self, api: CasambiApi, unit: Unit) -> None:
         """Initialize a Casambi vertical entity."""
 
-        desc = TypedEntityDescription(key=unit.uuid, entity_type="vertical")
+        desc = TypedNumberEntityDescription(key=unit.uuid, entity_type="vertical")
 
         self._obj: Unit
         super().__init__(api, desc, unit)
@@ -95,13 +105,27 @@ class CasambiVerticalNumberUnit(CasambiVerticalNumber, CasambiUnitEntity):
         return None
 
 
-class CasambiVerticalNumberGroup(CasambiVerticalNumber, CasambiNetworkEntity):
+class CasambiVerticalNumberGroup(CasambiVerticalNumber, CasambiNetworkGroup):
     """Defines a Casambi vertical entity group."""
 
     def __init__(self, api: CasambiApi, group: Group) -> None:
         """Initialize a Casambi vertical group entity."""
 
-        desc = TypedEntityDescription(
+        desc = TypedNumberEntityDescription(
             key=str(group.groudId), name=group.name, entity_type="vertical"
         )
+
+        self._obj: Group
         super().__init__(api, desc, group)
+
+    @property
+    def native_value(self) -> float | None:
+        """Get the average vertical value of the group."""
+        group = cast(Group, self._obj)
+        values = [
+            float(unit.state.vertical) for unit in group.units
+            if unit.state is not None and unit.state.vertical is not None
+        ]
+        if values:
+            return sum(values) / len(values)
+        return None

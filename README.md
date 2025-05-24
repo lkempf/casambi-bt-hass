@@ -40,11 +40,12 @@ Supported control types:
 - Rgb
 - OnOff
 - Temperature (Only for units since there are some open problems for groups.)
+- Vertical
 
 Not supported yet:
 - Switches
 - Sensors
-- Additional control types (e.g. temperature, vertical, ...)
+- Additional control types (e.g. temperature, ...)
 - Networks with classic firmware
 
 ## Reporting issues
