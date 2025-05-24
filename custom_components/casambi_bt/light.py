@@ -7,7 +7,7 @@ from copy import copy
 import logging
 from typing import Any, Final, cast
 
-from CasambiBt import Group, Unit, UnitControlType, UnitState, _operation
+from CasambiBt import ColorSource, Group, Unit, UnitControlType, UnitState, _operation
 
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
@@ -207,19 +207,19 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
         if ATTR_RGBW_COLOR in kwargs:
             state.rgb = kwargs[ATTR_RGBW_COLOR][:3]
             state.white = kwargs[ATTR_RGBW_COLOR][3]
-            state.colorsource = 1
+            state.colorsource = ColorSource.RGB
             set_state = True
         if ATTR_RGB_COLOR in kwargs:
             state.rgb = kwargs[ATTR_RGB_COLOR]
-            state.colorsource = 1
+            state.colorsource = ColorSource.RGB
             set_state = True
         if ATTR_COLOR_TEMP_KELVIN in kwargs:
             state.temperature = kwargs[ATTR_COLOR_TEMP_KELVIN]
-            state.colorsource = 0
+            state.colorsource = ColorSource.TEMPERATURE
             set_state = True
         if ATTR_XY_COLOR in kwargs:
             state.xy = kwargs[ATTR_XY_COLOR]
-            state.colorsource = 2
+            state.colorsource = ColorSource.XY
             set_state = True
 
         if set_state:
