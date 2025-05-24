@@ -137,7 +137,7 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
             self._attr_min_color_temp_kelvin = temp_control.min
             self._attr_max_color_temp_kelvin = temp_control.max
 
-        desc = TypedEntityDescription(key=unit.uuid, entity_type="light")
+        desc = TypedEntityDescription(key=unit.uuid, name=None, entity_type="light")
 
         self._obj: Unit
         super().__init__(api, desc, unit)
