@@ -89,7 +89,7 @@ class CasambiVerticalNumberUnit(CasambiVerticalNumber, CasambiUnitEntity):
     @property
     def native_value(self) -> float | None:
         """Get the vertical value of the unit."""
-        unit = cast(Unit, self._obj)
+        unit = cast("Unit", self._obj)
         if unit.state is not None and unit.state.vertical is not None:
             return float(unit.state.vertical)
         return None

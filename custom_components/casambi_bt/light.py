@@ -150,7 +150,7 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
     @property
     def brightness(self) -> int | None:
         """Return the brightness of the unit."""
-        unit = cast(Unit, self._obj)
+        unit = cast("Unit", self._obj)
         if unit.state is not None:
             return unit.state.dimmer
         return None
@@ -158,7 +158,7 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
     @property
     def rgb_color(self) -> tuple[int, int, int] | None:
         """Return the rgb color of the unit."""
-        unit = cast(Unit, self._obj)
+        unit = cast("Unit", self._obj)
         if unit.state is not None:
             return unit.state.rgb
         return None
@@ -166,7 +166,7 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
     @property
     def rgbw_color(self) -> tuple[int, int, int, int] | None:
         """Return the rgbw color of the unit."""
-        unit = cast(Unit, self._obj)
+        unit = cast("Unit", self._obj)
         if (
             unit.state is not None
             and unit.state.rgb is not None
@@ -178,7 +178,7 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
     @property
     def color_temp_kelvin(self) -> int | None:
         """Return the color temperature in Kelvin."""
-        unit = cast(Unit, self._obj)
+        unit = cast("Unit", self._obj)
         if unit.state is not None:
             return unit.state.temperature
         return None
@@ -186,14 +186,14 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
     @property
     def xy_color(self) -> tuple[float, float] | None:
         """Return the XY color value."""
-        unit = cast(Unit, self._obj)
+        unit = cast("Unit", self._obj)
         if unit.state is not None:
             return unit.state.xy
         return None
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the unit."""
-        unit = cast(Unit, self._obj)
+        unit = cast("Unit", self._obj)
         state = copy(unit.state)
         if not state:
             state = UnitState()
@@ -232,7 +232,7 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
         # HACK: Try to get lights only supporting ONOFF to turn off.
         # SetLevel doesn't seem to work for unknown reasons.
         if self.color_mode == ColorMode.ONOFF:
-            unit = cast(Unit, self._obj)
+            unit = cast("Unit", self._obj)
             await self._api.casa._send(  # noqa: SLF001
                 unit, bytes(unit.unitType.stateLength), _operation.OpCode.SetState
             )

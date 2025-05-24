@@ -21,7 +21,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.device_registry import format_mac
-
 from homeassistant.helpers.httpx_client import get_async_client
 
 from . import get_cache_dir
