@@ -112,7 +112,7 @@ class CasambiNetworkGroup(CasambiNetworkEntity, metaclass=ABCMeta):
 
     @callback
     def _change_callback(self, unit: CasambiUnit) -> None:
-        group = cast(CasambiGroup, self._obj)
+        group = cast("CasambiGroup", self._obj)
         _LOGGER.debug(
             "Handling state change for unit %i in group %i",
             unit.deviceId,
@@ -129,13 +129,13 @@ class CasambiNetworkGroup(CasambiNetworkEntity, metaclass=ABCMeta):
 
     async def async_added_to_hass(self) -> None:
         """Run when the group is about to be added to hass."""
-        group = cast(CasambiGroup, self._obj)
+        group = cast("CasambiGroup", self._obj)
         for unit in group.units:
             self._api.register_unit_updates(unit, self._change_callback)
 
     async def async_will_remove_from_hass(self) -> None:
         """Run when the group will be removed from hass."""
-        group = cast(CasambiGroup, self._obj)
+        group = cast("CasambiGroup", self._obj)
         for unit in group.units:
             self._api.unregister_unit_updates(unit, self._change_callback)
 
@@ -152,14 +152,14 @@ class CasambiUnitEntity(CasambiEntity, metaclass=ABCMeta):
     @property
     def unique_id(self) -> str:
         """Return an unique identifier for the unit."""
-        unit = cast(CasambiUnit, self._obj)
-        desc = cast(TypedEntityDescription, self.entity_description)
+        unit = cast("CasambiUnit", self._obj)
+        desc = cast("TypedEntityDescription", self.entity_description)
         return f"{self._api.casa.networkId}-unit-{unit.uuid}-{desc.entity_type}"
 
     @property
     def device_info(self) -> DeviceInfo:
         """Return specific device information."""
-        unit = cast(CasambiUnit, self._obj)
+        unit = cast("CasambiUnit", self._obj)
         return DeviceInfo(
             name=unit.name,
             manufacturer=unit.unitType.manufacturer,
@@ -172,7 +172,7 @@ class CasambiUnitEntity(CasambiEntity, metaclass=ABCMeta):
     @property
     def available(self) -> bool:
         """Return True if the unit is available."""
-        unit = cast(CasambiUnit, self._obj)
+        unit = cast("CasambiUnit", self._obj)
         return super().available and unit.online
 
     @callback
@@ -181,7 +181,7 @@ class CasambiUnitEntity(CasambiEntity, metaclass=ABCMeta):
         if unit.state:
             self._obj = unit
         else:
-            own_unit = cast(CasambiUnit, self._obj)
+            own_unit = cast("CasambiUnit", self._obj)
             # This update doesn't have a state.
             # This can happen if the unit isn't online so only look at that part.
             own_unit._online = unit.online  # noqa: SLF001
@@ -189,10 +189,10 @@ class CasambiUnitEntity(CasambiEntity, metaclass=ABCMeta):
 
     async def async_added_to_hass(self) -> None:
         """Run when the unit is about to be added to hass."""
-        unit = cast(CasambiUnit, self._obj)
+        unit = cast("CasambiUnit", self._obj)
         self._api.register_unit_updates(unit, self._change_callback)
 
     async def async_will_remove_from_hass(self) -> None:
         """Run when the unit will be removed from hass."""
-        unit = cast(CasambiUnit, self._obj)
+        unit = cast("CasambiUnit", self._obj)
         self._api.unregister_unit_updates(unit, self._change_callback)
