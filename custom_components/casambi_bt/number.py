@@ -121,7 +121,7 @@ class CasambiVerticalNumberGroup(CasambiVerticalNumber, CasambiNetworkGroup):
     @property
     def native_value(self) -> float | None:
         """Get the average vertical value of the group."""
-        group = cast(Group, self._obj)
+        group = cast("Group", self._obj)
         values = [
             float(unit.state.vertical) for unit in group.units
             if unit.state is not None and unit.state.vertical is not None
