@@ -5,6 +5,7 @@ on:
       - opened
       - reopened
       - synchronize
+      - edited
 jobs:
   check-branches:
     runs-on: ubuntu-latest
