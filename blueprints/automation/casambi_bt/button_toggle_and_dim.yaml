@@ -1,0 +1,215 @@
+blueprint:
+  name: Casambi Button Toggle and Dim
+  description: Short press to toggle light, hold to dim (combines toggle and dimming functionality)
+  domain: automation
+  input:
+    unit_id:
+      name: Unit ID
+      description: The Casambi unit ID of your switch
+      selector:
+        number:
+          mode: box
+    button:
+      name: Button Number
+      description: Button number (0-based)
+      default: 0
+      selector:
+        number:
+          mode: box
+    message_type:
+      name: Message Type (Optional)
+      description: Filter by message type. Leave empty to accept any
+      default: ""
+      selector:
+        text:
+    target_light:
+      name: Target Light
+      description: The light to control
+      selector:
+        entity:
+          domain: light
+    dimming_direction:
+      name: Dimming Direction
+      description: Direction to dim when holding the button
+      default: toggle
+      selector:
+        select:
+          options:
+            - label: "Increase Brightness"
+              value: "up"
+            - label: "Decrease Brightness"
+              value: "down"
+            - label: "Toggle Direction (if brightness > 50% dim down, otherwise dim up)"
+              value: "toggle"
+    dimming_step:
+      name: Dimming Step
+      description: How much to change brightness each step (0-255, will be converted to percentage)
+      default: 25
+      selector:
+        number:
+          min: 1
+          max: 50
+          mode: slider
+    dimming_interval:
+      name: Dimming Interval
+      description: Milliseconds between each dimming step
+      default: 200
+      selector:
+        number:
+          min: 50
+          max: 1000
+          step: 50
+          unit_of_measurement: ms
+    button_state_helper:
+      name: Button State Helper
+      description: Input text helper to track button state (create one per button you want to control)
+      selector:
+        entity:
+          domain: input_text
+    debounce_time:
+      name: Debounce Time
+      description: Minimum seconds between toggle actions (prevents accidental double-triggers)
+      default: 1
+      selector:
+        number:
+          min: 0.5
+          max: 5
+          step: 0.5
+          unit_of_measurement: seconds
+
+mode: parallel  # Allow multiple instances
+max: 3
+
+variables:
+  message_type: !input message_type
+  target_light: !input target_light
+  dimming_direction: !input dimming_direction
+  dimming_step: !input dimming_step
+  dimming_interval: !input dimming_interval
+  button_state_helper: !input button_state_helper
+  debounce_time: !input debounce_time
+
+trigger:
+  - platform: event
+    event_type: casambi_bt_switch_event
+    event_data:
+      unit_id: !input unit_id
+      button: !input button
+
+condition:
+  - condition: template
+    value_template: >
+      {% set message_type_filter = message_type | default('') %}
+      {% set event_message_type = trigger.event.data.message_type | string %}
+      {% set event_action = trigger.event.data.action %}
+      {% set message_match = (message_type_filter == '') or (message_type_filter == event_message_type) %}
+      
+      {# Accept all relevant button events #}
+      {{ message_match and event_action in ['button_press', 'button_release', 'button_hold', 'button_release_after_hold'] }}
+
+action:
+  - choose:
+      # Handle short press toggle (button_release without prior hold)
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ trigger.event.data.action == 'button_release' and 
+                 (states(button_state_helper) == 'pressed' or
+                  (states(button_state_helper) != 'holding_up' and 
+                   states(button_state_helper) != 'holding_down')) }}
+        sequence:
+          - service: light.toggle
+            target:
+              entity_id: !input target_light
+          # Reset helper after toggle
+          - service: input_text.set_value
+            target:
+              entity_id: !input button_state_helper
+            data:
+              value: "idle"
+      
+      # Handle button press - just track state
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.event.data.action == 'button_press' }}"
+        sequence:
+          - service: input_text.set_value
+            target:
+              entity_id: !input button_state_helper
+            data:
+              value: "pressed"
+      
+      # Handle button release after hold - just update the helper
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.event.data.action == 'button_release_after_hold' }}"
+        sequence:
+          - service: input_text.set_value
+            target:
+              entity_id: !input button_state_helper
+            data:
+              value: "released"
+      
+      # Handle button hold - update helper and start dimming loop
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.event.data.action == 'button_hold' }}"
+        sequence:
+          # Update button state to holding
+          - service: input_text.set_value
+            target:
+              entity_id: !input button_state_helper
+            data:
+              value: "holding"
+          
+          # Determine initial direction and store it
+          - service: input_text.set_value
+            target:
+              entity_id: !input button_state_helper
+            data:
+              value: >
+                {% set light_entity = target_light %}
+                {% set direction = dimming_direction | default('toggle') %}
+                {% if direction == 'down' %}
+                  holding_down
+                {% elif direction == 'up' %}
+                  holding_up
+                {% elif states(light_entity) == 'on' and (state_attr(light_entity, 'brightness') | int(0) > 127) %}
+                  holding_down
+                {% else %}
+                  holding_up
+                {% endif %}
+          
+          # Start dimming loop
+          - repeat:
+              while:
+                - condition: template
+                  value_template: >
+                    {{ states(button_state_helper) in ['holding_up', 'holding_down'] }}
+              sequence:
+                - variables:
+                    light_entity: !input target_light
+                    helper_state: "{{ states(button_state_helper) }}"
+                    dimming_step_value: !input dimming_step
+                    step_pct: "{{ (dimming_step_value | default(25) / 255 * 100) | round(1) }}"
+                    current_brightness: "{{ state_attr(light_entity, 'brightness') | int(255) }}"
+                    calculated_step: >
+                      {% if helper_state == 'holding_down' %}
+                        {% if current_brightness > 16 %}
+                          {{ -step_pct }}
+                        {% else %}
+                          {{ (1 - current_brightness) / 255 * 100 }}
+                        {% endif %}
+                      {% else %}
+                        {{ step_pct }}
+                      {% endif %}
+                
+                - service: light.turn_on
+                  target:
+                    entity_id: !input target_light
+                  data:
+                    brightness_step_pct: "{{ calculated_step }}"
+                    transition: >
+                      {{ (dimming_interval | default(200)) / 1000 }}
+                - delay:
+                    milliseconds: !input dimming_interval
