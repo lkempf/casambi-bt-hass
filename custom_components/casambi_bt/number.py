@@ -67,8 +67,7 @@ class CasambiVerticalNumber(CasambiEntity, NumberEntity, metaclass=ABCMeta):
     """
 
     def __init__(
-        self,
-        api: CasambiApi,
+        self, api: CasambiApi,
         description: TypedNumberEntityDescription,
         obj: Group | Unit,
     ) -> None:
@@ -124,8 +123,7 @@ class CasambiVerticalNumberGroup(CasambiVerticalNumber, CasambiNetworkGroup):
         """Get the average vertical value of the group."""
         group = cast("Group", self._obj)
         values = [
-            float(unit.state.vertical)
-            for unit in group.units
+            float(unit.state.vertical) for unit in group.units
             if unit.state is not None and unit.state.vertical is not None
         ]
         if values:

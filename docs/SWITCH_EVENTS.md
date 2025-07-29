@@ -1,98 +1,110 @@
-# Switch Event Documentation
+# Switch Event Support
 
-This integration fires Home Assistant events when Casambi switches are pressed. These events can be used to trigger automations.
+Switch button press/release events are fired as Home Assistant events that can be used in automations.
 
 ## Event Details
+- **Event Type**: `casambi_bt_switch_event`
+- **Event Data**:
+  - `entry_id`: The config entry ID
+  - `unit_id`: The Casambi unit ID that sent the event
+  - `button`: Button number (1-4, matching Casambi app)
+  - `action`: Event type - one of:
+    - `"button_press"` - Initial button press
+    - `"button_hold"` - Sent continuously while button is held down
+    - `"button_release"` - Quick press and release
+    - `"button_release_after_hold"` - Release after holding
+  - `message_type`: Raw message type from the device
+  - `flags`: Additional flags from the message
 
-**Event Type:** `casambi_bt_switch_event`
+## Button Hold Timing
+- **Press to Hold Delay**: Approximately 500-600ms
+  - Short press (< 500ms): Fires `button_press` followed by `button_release`
+  - Long press (> 500ms): Fires `button_press`, then `button_hold` events start after ~500ms, finally `button_release_after_hold` when released
+- **Hold Event Frequency**: `button_hold` events repeat while the button is held
+  - The Casambi protocol sends multiple hold events with incrementing counters
+  - These events can be used for continuous actions like dimming
 
-**Event Data:**
-- `unit_id` - The ID of the switch unit
-- `button` - Button number (0-3 for 4-button switches)
-- `action` - The type of button action:
-  - `button_press` - Button initially pressed
-  - `button_hold` - Button held down (~500ms after press)
-  - `button_release` - Button released after short press
-  - `button_release_after_hold` - Button released after hold
+## Listening to Events
+You can monitor these events in Developer Tools → Events → Listen to events by entering `casambi_bt_switch_event` as the event type.
 
-## Finding Your Switch Unit ID
+## Important Notes
 
-1. Enable debug logging in `configuration.yaml`:
-   ```yaml
-   logger:
-     default: info
-     logs:
-       custom_components.casambi_bt: debug
-   ```
+**Tip**: You can use the Casambi app to configure switch button actions while simultaneously listening to events in Home Assistant. This allows you to:
+- Use Casambi's built-in button assignments for some actions
+- Create custom Home Assistant automations for other buttons
+- Have multiple ways to control your devices
 
-2. Press a button on your switch
-3. Check the logs for entries like:
-   ```
-   Fired casambi_bt_switch_event for unit 42 button 0 - button_press
-   ```
-   The unit ID in this example is `42`
+### Finding Your Switch Configuration
 
-## Example Automations
+#### Method 1: Using Home Assistant Developer Tools (Recommended)
+1. Go to **Developer Tools → Events** in Home Assistant
+2. In the "Listen to events" section, enter: `casambi_bt_switch_event`
+3. Click "Start listening"
+4. Press the physical button on your switch
+5. Check the captured event data for:
+   - `unit_id`: The switch's unit ID
+   - `button`: The button number (0-based)
+   - `action`: The event type (button_press, button_release, etc.)
 
-### Simple Light Toggle
+
+#### Method 2: Verifying Unit ID in Casambi App
+If you see multiple events with different `unit_id` values, verify the correct one:
+1. Open the Casambi app
+2. Go to **More → Switches**
+3. Select your switch
+4. Tap **Details**
+5. Note the **Unit ID** shown
+6. Use this Unit ID in your automations
+
+**Button Numbers**: Button numbers in events match the Casambi app (1-4). Always test each physical button first to verify which button number it generates in the events.
+
+### Event Deduplication
+The integration includes built-in event deduplication to prevent duplicate triggers. You can configure the deduplication window in the integration options (default: 600ms). This eliminates the need for complex debouncing logic in your automations.
+
+### Event Reliability
+Button press and release events are **not guaranteed** to be captured due to the nature of Bluetooth communication:
+- Sometimes `button_press` events may be missed entirely
+- For better reliability, consider triggering automations on both `button_press` and `button_release` events
+- Be aware that `button_release` fires for short presses while `button_release_after_hold` fires for long presses - they are distinct events
+
+## Example Event Data
+Here are examples of different switch events in Home Assistant:
+
+### Quick Press/Release
 ```yaml
-automation:
-  - alias: "Kitchen Light Toggle"
-    trigger:
-      - platform: event
-        event_type: casambi_bt_switch_event
-        event_data:
-          unit_id: 42
-          button: 0
-          action: button_press
-    action:
-      - service: light.toggle
-        target:
-          entity_id: light.kitchen
+event_type: casambi_bt_switch_event
+data:
+  entry_id: fc8461de92e186495147fdb327fddea9
+  unit_id: 31
+  button: 1
+  action: button_release
+  message_type: 8
+  flags: 3
+origin: LOCAL
 ```
 
-### Different Actions for Short/Long Press
+### Button Hold Event (fires continuously)
 ```yaml
-automation:
-  - alias: "Living Room - Short Press"
-    trigger:
-      - platform: event
-        event_type: casambi_bt_switch_event
-        event_data:
-          unit_id: 42
-          button: 0
-          action: button_release  # Short press
-    action:
-      - service: light.toggle
-        target:
-          entity_id: light.living_room
-  
-  - alias: "Living Room - Long Press"
-    trigger:
-      - platform: event
-        event_type: casambi_bt_switch_event
-        event_data:
-          unit_id: 42
-          button: 0
-          action: button_hold
-    action:
-      - service: light.turn_on
-        target:
-          entity_id: light.living_room
-        data:
-          brightness_pct: 100
+event_type: casambi_bt_switch_event
+data:
+  entry_id: fc8461de92e186495147fdb327fddea9
+  unit_id: 31
+  button: 1
+  action: button_hold
+  message_type: 16
+  flags: 2
+origin: LOCAL
 ```
 
-## Using Developer Tools
-
-You can monitor switch events in real-time:
-1. Go to Developer Tools → Events
-2. Under "Listen to events", enter: `casambi_bt_switch_event`
-3. Click "Start Listening"
-4. Press buttons on your switch to see the events
-
-## Notes
-
-- Switches do not appear as entities in Home Assistant
-- The integration automatically filters duplicate events
-- Some wireless switches may occasionally generate extra events, but this doesn't affect functionality
+### Release After Hold
+```yaml
+event_type: casambi_bt_switch_event
+data:
+  entry_id: fc8461de92e186495147fdb327fddea9
+  unit_id: 31
+  button: 1
+  action: button_release_after_hold
+  message_type: 16
+  flags: 2
+origin: LOCAL
+```

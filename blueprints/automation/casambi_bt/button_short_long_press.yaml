@@ -1,6 +1,6 @@
 blueprint:
   name: Casambi Button Actions
-  description: Versatile button automation with customizable actions for different button events
+  description: Versatile button automation with customizable actions for different button events - v1.1.0
   domain: automation
   input:
     unit_id:
@@ -243,6 +243,28 @@ action:
                       value: "released"
           
           # Execute long press released action
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ long_press_released_action | length > 0 }}"
+                sequence: !input long_press_released_action
+      
+      # Handle button_release when stuck in holding/continuous_hold state (for units that only send release events)
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ trigger.event.data.action == 'button_release' and
+                 button_state_helper != '' and
+                 states(button_state_helper) in ['holding', 'continuous_hold'] }}
+        sequence:
+          # Stop continuous hold by resetting state
+          - service: input_text.set_value
+            target:
+              entity_id: !input button_state_helper
+            data:
+              value: "idle"
+          
+          # Execute long press released action (since this is effectively a release after hold)
           - choose:
               - conditions:
                   - condition: template
