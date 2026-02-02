@@ -1,0 +1,207 @@
+blueprint:
+  name: Casambi Button Cover Control
+  description: Control blinds/covers - short press to open/close/stop, hold to open/close continuously - v1.2.0
+  domain: automation
+  input:
+    unit_id:
+      name: Unit ID
+      description: The Casambi unit ID of your switch
+      selector:
+        number:
+          mode: box
+    button:
+      name: Button Number
+      description: Button number (0-based)
+      default: 0
+      selector:
+        number:
+          mode: box
+    message_type:
+      name: Message Type (Optional)
+      description: Filter by message type. Leave empty to accept any
+      default: ""
+      selector:
+        text:
+    target_cover:
+      name: Target Cover
+      description: The cover/blind to control
+      selector:
+        entity:
+          domain: cover
+    position_threshold:
+      name: Position Threshold
+      description: Position above which cover will close (below will open)
+      default: 50
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+    button_state_helper:
+      name: Button State Helper
+      description: Input text helper to track button state (create one per button you want to control)
+      selector:
+        entity:
+          domain: input_text
+
+mode: parallel
+max: 3
+
+variables:
+  message_type: !input message_type
+  target_cover: !input target_cover
+  position_threshold: !input position_threshold
+  button_state_helper: !input button_state_helper
+
+trigger:
+  - platform: event
+    event_type: casambi_bt_switch_event
+    event_data:
+      unit_id: !input unit_id
+      button: !input button
+
+condition:
+  - condition: template
+    value_template: >
+      {% set message_type_filter = message_type | default('') %}
+      {% set event_message_type = trigger.event.data.message_type | string %}
+      {% set event_action = trigger.event.data.action %}
+      {% set message_match = (message_type_filter == '') or (message_type_filter == event_message_type) %}
+      
+      {# Accept all relevant button events #}
+      {{ message_match and event_action in ['button_press', 'button_release', 'button_hold', 'button_release_after_hold'] }}
+
+action:
+  - variables:
+      event_action: "{{ trigger.event.data.action }}"
+      current_state: "{{ states(button_state_helper) }}"
+      is_holding: "{{ current_state == 'holding' }}"
+      is_release_event: "{{ event_action in ['button_release', 'button_release_after_hold'] }}"
+      cover_is_moving: "{{ states(target_cover) in ['opening', 'closing'] }}"
+      current_position: "{{ state_attr(target_cover, 'current_position') | int(50) }}"
+      
+  - choose:
+      # Handle button press - just track state
+      - conditions:
+          - condition: template
+            value_template: "{{ event_action == 'button_press' }}"
+        sequence:
+          - service: input_text.set_value
+            target:
+              entity_id: !input button_state_helper
+            data:
+              value: "pressed"
+      
+      # Handle normal button release (short press)
+      - conditions:
+          - condition: template
+            value_template: "{{ event_action == 'button_release' and not is_holding }}"
+        sequence:
+          - choose:
+              # If cover is moving, stop it
+              - conditions:
+                  - condition: template
+                    value_template: "{{ cover_is_moving }}"
+                sequence:
+                  - service: cover.stop_cover
+                    target:
+                      entity_id: !input target_cover
+              # If position <= threshold, open (it's mostly closed)
+              - conditions:
+                  - condition: template
+                    value_template: "{{ current_position <= position_threshold }}"
+                sequence:
+                  - service: cover.open_cover
+                    target:
+                      entity_id: !input target_cover
+            # Otherwise close (position > threshold, it's mostly open)
+            default:
+              - service: cover.close_cover
+                target:
+                  entity_id: !input target_cover
+          - service: input_text.set_value
+            target:
+              entity_id: !input button_state_helper
+            data:
+              value: "idle"
+      
+      # Handle button release while holding - stop the cover
+      - conditions:
+          - condition: template
+            value_template: "{{ (event_action == 'button_release' or event_action == 'button_release_after_hold') and is_holding }}"
+        sequence:
+          - service: cover.stop_cover
+            target:
+              entity_id: !input target_cover
+          - service: input_text.set_value
+            target:
+              entity_id: !input button_state_helper
+            data:
+              value: "idle"
+      
+      # Handle button hold - start opening or closing
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.event.data.action == 'button_hold' }}"
+        sequence:
+          # Set state to holding
+          - service: input_text.set_value
+            target:
+              entity_id: !input button_state_helper
+            data:
+              value: "holding"
+          
+          # Get fresh position and determine direction
+          - variables:
+              fresh_position: "{{ state_attr(target_cover, 'current_position') | int(50) }}"
+              cover_moving: "{{ states(target_cover) in ['opening', 'closing'] }}"
+          
+          # Determine direction and start movement
+          - choose:
+              # If position > threshold, close it (it's mostly open)
+              # If cover is already closing, continue closing
+              # If cover is opening, reverse to close
+              - conditions:
+                  - condition: or
+                    conditions:
+                      - condition: template
+                        value_template: "{{ fresh_position > position_threshold }}"
+                      - condition: template
+                        value_template: "{{ states(target_cover) == 'opening' }}"
+                sequence:
+                  - service: cover.close_cover
+                    target:
+                      entity_id: !input target_cover
+            # Otherwise open it (position <= threshold or already closing)
+            default:
+              - service: cover.open_cover
+                target:
+                  entity_id: !input target_cover
+          
+          # Monitor cover position and reset state when fully open/closed
+          - repeat:
+              while:
+                - condition: template
+                  value_template: >
+                    {% set helper_state = states(button_state_helper) %}
+                    {% set is_still_holding = helper_state == 'holding' %}
+                    {{ is_still_holding }}
+              sequence:
+                - variables:
+                    position: "{{ state_attr(target_cover, 'current_position') | int(50) }}"
+                    is_open: "{{ states(target_cover) == 'open' }}"
+                    is_closed: "{{ states(target_cover) == 'closed' }}"
+                    at_limit: "{{ (position >= 98 or is_open) or (position <= 2 or is_closed) }}"
+                - choose:
+                    # Check if fully open or closed
+                    - conditions:
+                        - condition: template
+                          value_template: "{{ at_limit }}"
+                      sequence:
+                        - service: input_text.set_value
+                          target:
+                            entity_id: !input button_state_helper
+                          data:
+                            value: "idle"
+                - delay:
+                    milliseconds: 500

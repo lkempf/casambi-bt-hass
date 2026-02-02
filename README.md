@@ -43,10 +43,30 @@ Supported control types:
 - Vertical
 
 Not supported yet:
-- Switches
+- Switches (as entities) - **NEW**: Physical switch button press, hold, and release events
 - Sensors
 - Additional control types (e.g. temperature, ...)
 - Networks with classic firmware
+
+### Switch Button Events
+
+Physical switches now fire events for automations:
+- Button press, hold, and release detection
+- ~500ms press-to-hold delay
+- Support for short/long press actions
+
+Events are fired as `casambi_bt_switch_event` and can be used in automations.
+
+[**→ Detailed Switch Event Documentation**](docs/SWITCH_EVENTS.md)
+
+### Automation Blueprints
+
+The integration includes ready-to-use blueprints for common switch patterns:
+- **Toggle and Dim** - All-in-one light control (short press = toggle, hold = dim)
+- **Button Actions** - Versatile automation for any button event
+- **Cover Control** - Smart blind/cover control
+
+[**→ Blueprint Documentation**](docs/BLUEPRINTS.md)
 
 ## Reporting issues
 

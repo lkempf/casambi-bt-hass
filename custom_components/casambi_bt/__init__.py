@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable, Iterable
+import contextlib
 import logging
 from pathlib import Path
+import time
 from typing import Final
 
 from CasambiBt import Casambi, Group, Scene, Unit, UnitControlType
@@ -29,8 +31,99 @@ _LOGGER: Final = logging.getLogger(__name__)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Casambi Bluetooth from a config entry."""
+    _LOGGER.debug("Connecting to %s with %s", CONF_ADDRESS, CONF_PASSWORD)
+
+    # Check if we need to migrate from old data structure
+    if entry.entry_id in hass.data.get(DOMAIN, {}):
+        existing_data = hass.data[DOMAIN][entry.entry_id]
+        if isinstance(existing_data, CasambiApi):
+            _LOGGER.warning("Migrating from old Casambi data structure")
+            # Disconnect the old API instance
+            with contextlib.suppress(Exception):
+                await existing_data.disconnect()
+
     api = CasambiApi(hass, entry, entry.data[CONF_ADDRESS], entry.data[CONF_PASSWORD])
     await api.connect()
+
+    # Event deduplication cache: (unit_id, button, action) -> timestamp
+    event_cache: dict[tuple[int, int, str], float] = {}
+
+    # Get deduplication window from config or use default
+    dedup_window = entry.options.get("switch_event_dedup_window", 0.6)  # Default 600ms
+
+    _LOGGER.info("Switch event deduplication enabled with %.1fs window", dedup_window)
+
+    # Register switch event handler that fires Home Assistant events
+    def handle_switch_event(event_data: dict) -> None:
+        """Fire a Home Assistant event when a switch is pressed/released."""
+        # Convert any bytes objects to hex strings for JSON serialization
+        raw_packet = event_data.get("raw_packet")
+        decrypted_data = event_data.get("decrypted_data")
+        payload_hex = event_data.get("payload_hex")
+        extra_data = event_data.get("extra_data")
+
+        # Convert payload_hex to string if it's bytes
+        payload_hex_str = payload_hex.hex() if isinstance(payload_hex, bytes) else payload_hex
+
+        # Check for duplicate events
+        unit_id = event_data.get("unit_id")
+        button = event_data.get("button")
+        action = event_data.get("event")  # button_press, button_release, etc.
+
+        if unit_id is not None and button is not None and action:
+            cache_key = (unit_id, button, action)
+            current_time = time.time()
+
+            # Clean up old entries from cache
+            for key in list(event_cache.keys()):
+                if current_time - event_cache[key] > dedup_window:
+                    del event_cache[key]
+
+            # Check if this event was seen recently
+            if cache_key in event_cache:
+                time_diff = current_time - event_cache[cache_key]
+                if time_diff < dedup_window:
+                    _LOGGER.debug(
+                        "Skipping duplicate event: unit=%s, button=%s, action=%s (last seen %.3fs ago)",
+                        unit_id, button, action, time_diff
+                    )
+                    return
+
+            # Record this event
+            event_cache[cache_key] = current_time
+
+        hass.bus.async_fire(
+            f"{DOMAIN}_switch_event",
+            {
+                "entry_id": entry.entry_id,
+                "unit_id": event_data.get("unit_id"),
+                "button": event_data.get("button"),
+                "action": event_data.get("event"),  # "button_press", "button_hold", "button_release", or "button_release_after_hold"
+                "message_type": event_data.get("message_type"),
+                "flags": event_data.get("flags"),
+                "packet_sequence": event_data.get("packet_sequence"),
+                "raw_packet": raw_packet.hex() if isinstance(raw_packet, bytes) else raw_packet,
+                "decrypted_data": decrypted_data.hex() if isinstance(decrypted_data, bytes) else decrypted_data,
+                "message_position": event_data.get("message_position"),
+                "payload_hex": payload_hex_str,
+                "extra_data": extra_data.hex() if isinstance(extra_data, bytes) else None,
+            }
+        )
+        _LOGGER.debug(
+            "Fired %s_switch_event for unit %s button %s - %s (seq: %s, raw: %s)",
+            DOMAIN,
+            event_data.get('unit_id'),
+            event_data.get('button'),
+            event_data.get('event'),
+            event_data.get('packet_sequence'),
+            (raw_packet.hex()[:20] + '...') if raw_packet else 'None'
+        )
+
+    # Register the event handler if the library supports it
+    if hasattr(api.casa, 'registerSwitchEventHandler'):
+        api.register_switch_event_callback(handle_switch_event)
+        _LOGGER.info("Switch event handler registered - events will fire as casambi_bt_switch_event")
+
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = api
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -76,6 +169,7 @@ class CasambiApi:
         self.casa: Casambi = Casambi(get_async_client(hass), get_cache_dir(hass))
 
         self._callback_map: dict[int, list[Callable[[Unit], None]]] = {}
+        self._switch_event_callbacks: list[Callable[[dict], None]] = []
         self._cancel_bluetooth_callback: Callable[[], None] | None = None
         self._reconnect_lock = asyncio.Lock()
         self._first_disconnect = True
@@ -99,6 +193,12 @@ class CasambiApi:
 
             self.casa.registerDisconnectCallback(self._casa_disconnect)
             self.casa.registerUnitChangedHandler(self._unit_changed_handler)
+
+            # Register switch event handler if available (new in casambi-bt 0.3.0)
+            if hasattr(self.casa, 'registerSwitchEventHandler'):
+                self.casa.registerSwitchEventHandler(self._switch_event_handler)
+            else:
+                _LOGGER.warning("Switch event handler not available in casambi-bt library. Please update to latest version.")
 
             await self.casa.connect(device, self.password)
             self._first_disconnect = True
@@ -167,6 +267,10 @@ class CasambiApi:
                 _LOGGER.exception("Error during disconnect.")
             self.casa.unregisterUnitChangedHandler(self._unit_changed_handler)
 
+            # Unregister switch event handler if available
+            if hasattr(self.casa, 'unregisterSwitchEventHandler'):
+                self.casa.unregisterSwitchEventHandler(self._switch_event_handler)
+
     @callback
     def _casa_disconnect(self) -> None:
         if self._first_disconnect:
@@ -234,6 +338,29 @@ class CasambiApi:
             return
         for c in self._callback_map[unit.deviceId]:
             c(unit)
+
+    @callback
+    def _switch_event_handler(self, event_data: dict) -> None:
+        """Handle switch events from the Casambi network."""
+        _LOGGER.debug("Switch event received: %s", event_data)
+        for cb in self._switch_event_callbacks:
+            if asyncio.iscoroutinefunction(cb):
+                self.conf_entry.async_create_task(
+                    self.hass, cb(event_data), "switch_event_callback"
+                )
+            else:
+                cb(event_data)
+
+    def register_switch_event_callback(self, callback: Callable[[dict], None]) -> None:
+        """Register a callback for switch events."""
+        self._switch_event_callbacks.append(callback)
+        _LOGGER.debug("Registered switch event callback: %s", callback)
+
+    def unregister_switch_event_callback(self, callback: Callable[[dict], None]) -> None:
+        """Unregister a callback for switch events."""
+        if callback in self._switch_event_callbacks:
+            self._switch_event_callbacks.remove(callback)
+            _LOGGER.debug("Unregistered switch event callback: %s", callback)
 
     @callback
     def _bluetooth_callback(
