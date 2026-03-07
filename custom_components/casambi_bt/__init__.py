@@ -227,8 +227,8 @@ class CasambiApi:
                 except Exception as err:
                     self._reconnect_attempt += 1
                     if self._reconnect_attempt < self._max_reconnect_attempts:
-                        # Calculate exponential backoff: 10s, 20s, 40s, 80s
-                        backoff_delay = min(10 * (2 ** (self._reconnect_attempt - 1)), 120)
+                        # Backoff schedule: 1s, 5s, 10s, 20s
+                        backoff_delay = [1, 5, 10, 20][min(self._reconnect_attempt - 1, 3)]
                         _LOGGER.warning(
                             f"Reconnect attempt {self._reconnect_attempt} failed: {err}. "
                             f"Retrying in {backoff_delay}s..."
