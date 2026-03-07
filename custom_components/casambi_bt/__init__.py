@@ -201,8 +201,8 @@ class CasambiApi:
 
     async def _delayed_reconnect(self) -> None:
         """Delayed reconnect with exponential backoff on failures."""
-        # Initial delay before first reconnect attempt
-        await asyncio.sleep(30)
+        # Brief pause to let BlueZ finish processing the disconnect internally.
+        await asyncio.sleep(2)
 
         # Retry loop with exponential backoff
         while self._reconnect_attempt < self._max_reconnect_attempts:
