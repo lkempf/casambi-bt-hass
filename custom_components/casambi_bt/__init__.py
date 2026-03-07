@@ -79,6 +79,8 @@ class CasambiApi:
         self._cancel_bluetooth_callback: Callable[[], None] | None = None
         self._reconnect_lock = asyncio.Lock()
         self._first_disconnect = True
+        self._reconnect_attempt = 0
+        self._max_reconnect_attempts = 5
 
     def _register_bluetooth_callback(self) -> None:
         self._cancel_bluetooth_callback = bluetooth.async_register_callback(
@@ -88,8 +90,11 @@ class CasambiApi:
             bluetooth.BluetoothScanningMode.ACTIVE,
         )
 
-    async def connect(self) -> None:
-        """Connect to the Casmabi network."""
+    async def connect(self, *, is_reconnect: bool = False) -> None:
+        """Connect to the Casmabi network.
+
+        :param is_reconnect: True if this is a reconnection attempt, False for initial setup.
+        """
         try:
             device = bluetooth.async_ble_device_from_address(
                 self.hass, self.address, connectable=True
@@ -102,17 +107,34 @@ class CasambiApi:
 
             await self.casa.connect(device, self.password)
             self._first_disconnect = True
+            # Reset reconnect counter on successful connection
+            self._reconnect_attempt = 0
         except BluetoothError as err:
+            if is_reconnect:
+                _LOGGER.warning(f"Bluetooth error during reconnect: {err}")
+                raise
             raise ConfigEntryNotReady("Failed to use bluetooth") from err
         except NetworkNotFoundError as err:
+            if is_reconnect:
+                _LOGGER.warning(f"Network not found during reconnect: {err}")
+                raise
             raise ConfigEntryNotReady(
                 f"Network with address {self.address} wasn't found"
             ) from err
         except AuthenticationError as err:
+            # Authentication errors are always fatal - bad password
             raise ConfigEntryAuthFailed(
                 f"Failed to authenticate to network {self.address}"
             ) from err
         except Exception as err:  # pylint: disable=broad-except
+            if is_reconnect:
+                # During reconnect, log but don't raise ConfigEntryError
+                # This allows future reconnection attempts
+                _LOGGER.warning(
+                    f"Error during reconnect attempt {self._reconnect_attempt}: {err}",
+                    exc_info=True
+                )
+                raise
             raise ConfigEntryError(
                 f"Unexpected error creating network {self.address}"
             ) from err
@@ -171,26 +193,57 @@ class CasambiApi:
     def _casa_disconnect(self) -> None:
         if self._first_disconnect:
             self._first_disconnect = False
+            # Reset reconnect counter when we get a new disconnect
+            self._reconnect_attempt = 0
             self.conf_entry.async_create_background_task(
                 self.hass, self._delayed_reconnect(), "Delayed reconnect"
             )
 
     async def _delayed_reconnect(self) -> None:
+        """Delayed reconnect with exponential backoff on failures."""
+        # Initial delay before first reconnect attempt
         await asyncio.sleep(30)
 
-        async with self._reconnect_lock:
-            if self.casa.connected:
-                return
+        # Retry loop with exponential backoff
+        while self._reconnect_attempt < self._max_reconnect_attempts:
+            async with self._reconnect_lock:
+                if self.casa.connected:
+                    return
 
-        _LOGGER.debug("Starting delayed reconnect.")
-        device = bluetooth.async_ble_device_from_address(self.hass, self.address)
-        if device is not None:
-            try:
-                await self.try_reconnect()
-            except Exception:
-                _LOGGER.exception("Error during reconnect. This is not unusual.")
-        else:
-            _LOGGER.debug("Skipping reconnect. HA reports device not present.")
+            _LOGGER.debug(
+                f"Starting delayed reconnect attempt {self._reconnect_attempt + 1}/{self._max_reconnect_attempts}"
+            )
+            device = bluetooth.async_ble_device_from_address(self.hass, self.address)
+            if device is not None:
+                try:
+                    await self.try_reconnect()
+                    # Success - exit the retry loop
+                    _LOGGER.info("Reconnection successful")
+                    return
+                except AuthenticationError:
+                    # Authentication errors are fatal, don't retry
+                    _LOGGER.error("Authentication failed during reconnect - not retrying")
+                    return
+                except Exception as err:
+                    self._reconnect_attempt += 1
+                    if self._reconnect_attempt < self._max_reconnect_attempts:
+                        # Calculate exponential backoff: 10s, 20s, 40s, 80s
+                        backoff_delay = min(10 * (2 ** (self._reconnect_attempt - 1)), 120)
+                        _LOGGER.warning(
+                            f"Reconnect attempt {self._reconnect_attempt} failed: {err}. "
+                            f"Retrying in {backoff_delay}s..."
+                        )
+                        await asyncio.sleep(backoff_delay)
+                    else:
+                        _LOGGER.error(
+                            f"Reconnection failed after {self._max_reconnect_attempts} attempts. "
+                            "Will retry when device is seen again via Bluetooth."
+                        )
+            else:
+                _LOGGER.debug("Skipping reconnect. HA reports device not present.")
+                # Device not present - wait and check again
+                await asyncio.sleep(30)
+                self._reconnect_attempt += 1
 
     async def try_reconnect(self) -> None:
         """Attemtps to reconnect to the Casambi network. Disconnects first to ensure a consitent state."""
@@ -208,7 +261,7 @@ class CasambiApi:
             # We don't actually need to disconnect except to clean up so this should be ok to ignore.
             except AttributeError:
                 _LOGGER.debug("Unexpected failure during disconnect.")
-            await self.connect()
+            await self.connect(is_reconnect=True)
         finally:
             self._reconnect_lock.release()
 
@@ -242,6 +295,8 @@ class CasambiApi:
         _change: bluetooth.BluetoothChange,
     ) -> None:
         if not self.casa.connected and service_info.connectable:
+            # Device is back in range, reset reconnect counter
+            self._reconnect_attempt = 0
             self.conf_entry.async_create_background_task(
                 self.hass, self.try_reconnect(), "Reconnect"
             )
