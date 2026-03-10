@@ -31,5 +31,18 @@
                 "title": "Please verify your network password."
             }
         }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Casambi Bluetooth Options",
+                "data": {
+                    "switch_event_dedup_window": "Switch event deduplication window (seconds)"
+                },
+                "data_description": {
+                    "switch_event_dedup_window": "Time window to filter duplicate switch events. Set to 0 to disable deduplication. Default: 0.6 seconds (600ms)."
+                }
+            }
+        }
     }
 }
