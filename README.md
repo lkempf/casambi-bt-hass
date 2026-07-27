@@ -45,8 +45,6 @@ Supported control types:
 Not supported yet:
 - Switches
 - Sensors
-- Additional control types (e.g. temperature, ...)
-- Networks with classic firmware
 
 ## Reporting issues
 
