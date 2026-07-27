@@ -14,6 +14,7 @@ from CasambiBt.errors import (
     AuthenticationError,
     BluetoothDeviceNotFoundError,
     BluetoothError,
+    ProtocolError,
 )
 
 from homeassistant.components import bluetooth
@@ -37,6 +38,9 @@ from .const import (
 )
 
 _LOGGER: Final = logging.getLogger(__name__)
+
+CONNECT_TIMEOUT: Final = 60
+CLIENT_CLEANUP_TIMEOUT: Final = 10
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -112,8 +116,11 @@ class CasambiApi:
             self._casa.registerDisconnectCallback(self._casa_disconnect)
             self._casa.registerUnitChangedHandler(self._unit_changed_handler)
 
-            await self._casa.connect(device, self.password)
-        except BluetoothError as err:
+            await asyncio.wait_for(
+                self._casa.connect(device, self.password), CONNECT_TIMEOUT
+            )
+        except (BluetoothError, ProtocolError, TimeoutError) as err:
+            await self._cleanup_client()
             raise ConfigEntryNotReady("Failed to use bluetooth") from err
         except BluetoothDeviceNotFoundError as err:
             raise ConfigEntryNotReady(
@@ -133,8 +140,26 @@ class CasambiApi:
         if not self._cancel_bluetooth_callback:
             self._register_bluetooth_callback()
 
+    async def _cleanup_client(self) -> None:
+        """Tear down the current BLE client, including its callback task.
+
+        casambi-bt 0.4.0b2 skips this cleanup when the connection state has
+        already changed to NONE. It then replaces the client during reconnect,
+        leaving the old callback task and Bleak client alive.
+        """
+        client = getattr(self._casa, "_casaClient", None)
+        if client is None:
+            return
+
+        try:
+            await asyncio.wait_for(client.disconnect(), CLIENT_CLEANUP_TIMEOUT)
+        except TimeoutError:
+            _LOGGER.warning("Timed out while cleaning up the old Casambi client")
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("Failed to clean up the old Casambi client", exc_info=True)
+
     async def reconnect(self) -> None:
-        """Start reconnection attempt to the Casmabi network."""
+        """Start reconnection attempts to the Casambi network."""
         backoff = RECONNECT_BACKOFF_START
         while True:
             try:
@@ -144,11 +169,18 @@ class CasambiApi:
                 if not device:
                     raise BluetoothDeviceNotFoundError  # noqa: TRY301
 
-                await self._casa.reconnect(device)
+                # Always clean up the previous client. casambi-bt's reconnect()
+                # only does this when its state is not NONE, even though an
+                # unexpected BLE disconnect has already set it to NONE.
+                await self._cleanup_client()
+                await asyncio.wait_for(
+                    self._casa.reconnect(device), CONNECT_TIMEOUT
+                )
                 break
-            except BluetoothError:
+            except (BluetoothError, ProtocolError, TimeoutError):
                 _LOGGER.debug(
-                    "Connecting failed due to bluetooth error. Retrying...",
+                    "Connecting failed due to a transient BLE/protocol error. "
+                    "Retrying...",
                     exc_info=True,
                 )
             except BluetoothDeviceNotFoundError:
@@ -163,7 +195,7 @@ class CasambiApi:
                 raise HomeAssistantError from err
 
             await asyncio.sleep(backoff)
-            backoff = max(RECONNECT_BACKOFF_MAX, backoff * RECONNECT_BACKOFF_STEP)
+            backoff = min(RECONNECT_BACKOFF_MAX, backoff * RECONNECT_BACKOFF_STEP)
 
     @property
     def available(self) -> bool:
