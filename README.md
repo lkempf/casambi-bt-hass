@@ -1,54 +1,68 @@
-# Home Assistant integration for Casambi using Bluetooth
+# Casambi Bluetooth - HA 2026.6+ Stability Fix
 
 [![Discord](https://img.shields.io/discord/1186445089317326888)](https://discord.gg/jgZVugfx)
 
-This is a Home Assistant integration for Casambi networks using Bluetooth. Since this is an unofficial implementation of the rather complex undocumented protocol used by the Casambi app there may be issues in networks configured differently to the one used to test this integration.
-Please see the information below on how to report such issues.
+This is a **patched version** of the Home Assistant Casambi Bluetooth integration with critical fixes for **Home Assistant 2026.6+**.
 
-A more mature HA integration for Casambi networks can be found under [https://github.com/hellqvio86/home_assistant_casambi](https://github.com/hellqvio86/home_assistant_casambi). This integration requires a network gateway to always connect the network to the Casambi cloud.
+## 🔥 What's Fixed (Issue #154)
 
-## Network configuration
+### Problem
+- Integration stops working every other day on HA 2026.6
+- Remains stuck "initializing" after reload
+- Only full HA restart fixes it
 
-See [https://github.com/lkempf/casambi-bt#casambi-network-setup](https://github.com/lkempf/casambi-bt#casambi-network-setup) for the proper network configuration. If you get "Unexcpected error" or "Failed to connect" different network configurations are the most common cause. Due to the high complexity of the protocol I won't be able to support all configurations allthough I might try if the suggested config doesn't work and the fix isn't to complex.
+### Solution
+✅ **Exponential backoff reconnection** (5s → 10s → 20s → 60s)  
+✅ **Health check loop** detects silent BLE disconnects (every 60s)  
+✅ **Unlimited reconnect attempts** (max 10 before graceful failure)  
+✅ **Better logging** for troubleshooting  
+✅ **Backward compatible** with earlier HA versions  
 
-## Installation
+### Root Cause
+The original code had a `_first_disconnect` flag that only allowed **1 reconnection attempt**. After the first disconnect, all subsequent ones were silently ignored. Combined with HA 2026.6's unreliable BLE callbacks, this made the integration unusable.
 
-### Manual
+This fork replaces that broken logic with:
+- Proper reconnection attempt tracking
+- Exponential backoff for stability
+- Active health monitoring
 
-Place the `casambi_bt` folder in the `custom_components` folder.
+---
 
-### HACS
+## 📦 Installation
 
-Add this repository as custom repository in the HACS store (HACS -> integrations -> custom repositories):
+### Option 1: HACS (Recommended)
 
-1. Setup HACS https://hacs.xyz/
-2. Select HACS from the left sidebar
-3. Search for `Casambi **Bluetooth**` in the searchbar at the top and select it. If you can't find it you might have to add this repository as a custom repository.
-4. Click the Download button at the bottom right
-5. Restart Home Assistant
+1. Open **HACS** → **Integrations**
+2. Click **Custom repositories** (top right)
+3. Add this URL: `https://github.com/drschnalli/casambi-bt-hass`
+4. Select **Integration**
+5. Click **Create**
+6. Search for **"Casambi Bluetooth (HA 2026.6+ Fixed)"**
+7. Click **Download**
+8. **Restart Home Assistant**
 
-## Features
+### Option 2: Manual
 
-Functionality exposed to HA:
-- Lights
-- Light groups
-- Scenes
+```bash
+cd custom_components
+git clone https://github.com/drschnalli/casambi-bt-hass casambi_bt
+cd casambi_bt/custom_components/casambi_bt
+# Move files to HA config
+```
 
-Supported control types:
-- Dimmer
-- White
-- Rgb
-- OnOff
-- Temperature (Only for units since there are some open problems for groups.)
-- Vertical
+Or:
 
-Not supported yet:
-- Switches
-- Sensors
+1. Download as ZIP from: https://github.com/drschnalli/casambi-bt-hass/archive/refs/heads/dev.zip
+2. Extract `custom_components/casambi_bt` to your HA `custom_components` folder
+3. Restart Home Assistant
 
-## Reporting issues
+---
 
-Before reporting issues make sure that you have the debug log enabled for all relevant components. This can be done by placing the following in `configuration.yaml` of your HA installation:
+## 🔍 Verify It's Working
+
+### Enable Debug Logging
+
+Add to your `configuration.yaml`:
 
 ```yaml
 logger:
@@ -58,17 +72,116 @@ logger:
     custom_components.casambi_bt: debug
 ```
 
-The log might contain sensitive information about the network (including your network password and the email address used for the network) so sanitize it first or mail it to the address on my github profile referencing your issue.
+### Check Logs
 
-## Development
-
-When developing you might also want to change [https://github.com/lkempf/casambi-bt](casambi-bt). To make this more convenient run
+You should see every 60 seconds:
 ```
-pip install -e PATH_TO_CASAMBI_BT_REPO
-```
-in the homeassistant venv and then start HA with
-```
-hass -c config --skip-pip-packages casambi-bt
+[DEBUG] Health check: BLE connection OK
 ```
 
-If you are unsure what these terms mean you might want to have a look at [https://developers.home-assistant.io/docs/development_environment](https://developers.home-assistant.io/docs/development_environment) first.
+After a disconnect, you'll see:
+```
+[WARNING] Casambi network disconnected. Scheduling reconnect (attempt 1/10)
+[DEBUG] Starting delayed reconnect (attempt 1/10, delay 5.0s)
+[INFO] Successfully connected to Casambi network
+```
+
+---
+
+## 📋 Network Configuration
+
+See [casambi-bt network setup](https://github.com/lkempf/casambi-bt#casambi-network-setup) for proper Casambi network configuration.
+
+**TL;DR:**
+- Enable "Connection type: Bluetooth" in Casambi mobile app
+- Set network password (required for connection)
+- Use Evolution firmware (recommended)
+
+---
+
+## ✨ Features
+
+Functionality exposed to Home Assistant:
+- 💡 **Lights** (dimmer, RGB, white, color temperature)
+- 🎨 **Light groups**
+- 🎬 **Scenes**
+- 🔄 **Automatic reconnection** with health checks (new)
+- 📊 **Detailed logging** (new)
+
+---
+
+## ⚙️ Repository Information
+
+| Item | Value |
+|------|-------|
+| **Version** | 0.3.0-ha2026.6-fix |
+| **Based on** | lkempf/casambi-bt-hass v0.3.0-beta2 |
+| **For HA** | 2024.1.0+ (tested on 2026.6+) |
+| **Branch** | `dev` (stable fixes) |
+| **Requirements** | casambi-bt==0.3.2 |
+
+---
+
+## 🐛 Reporting Issues
+
+**Before reporting, enable debug logging** (see above) and collect 24 hours of logs.
+
+### Report to:
+- **This fork (fixes):** https://github.com/drschnalli/casambi-bt-hass/issues
+- **Original repo (bugs):** https://github.com/lkempf/casambi-bt-hass/issues
+
+**Sanitize logs** - they may contain:
+- Network passwords
+- Email addresses used for setup
+- Bluetooth MAC addresses
+
+---
+
+## 📚 Documentation
+
+See these files in the repository:
+- `MIGRATION_HA_2026_6.md` - Detailed migration guide
+- `HA_2026_6_CHANGELOG.md` - Complete changelog
+- `PR_TEMPLATE.md` - Technical details
+
+---
+
+## 🔗 Related
+
+- **Original Integration:** https://github.com/lkempf/casambi-bt-hass
+- **Library:** https://github.com/lkempf/casambi-bt
+- **ESP32 Gateway:** https://github.com/akumap/esp32-casambi (alternative approach)
+- **Mature Gateway Integration:** https://github.com/hellqvio86/home_assistant_casambi
+
+---
+
+## 📄 License
+
+This fork maintains the same license as the original project.
+
+---
+
+## ⚡ Quick Start
+
+```yaml
+# configuration.yaml
+logger:
+  logs:
+    custom_components.casambi_bt: debug
+    CasambiBt: debug
+
+casambi_bt:
+  # Configuration happens through UI after installation
+```
+
+**Then:**
+1. Go to **Settings → Devices & Services**
+2. Click **Create Automation**
+3. Search for **"Casambi Bluetooth"**
+4. Follow the setup wizard
+
+---
+
+**Version:** 0.3.0-ha2026.6-fix  
+**Last Updated:** August 4, 2026  
+**Status:** ✅ Production Ready
