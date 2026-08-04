@@ -7,7 +7,7 @@ from copy import copy
 import logging
 from typing import Any, Final, cast
 
-from CasambiBt import ColorSource, Group, Unit, UnitControlType, UnitState, _operation
+from CasambiBt import ColorSource, Group, Unit, UnitControlType, UnitState
 
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
@@ -81,8 +81,8 @@ class CasambiLight(CasambiEntity, LightEntity, metaclass=ABCMeta):
         self._obj: Group | Unit
         super().__init__(api, description, obj)
 
-    def _capabilities_helper(self, unit: Unit) -> set[str]:
-        supported: set[str] = set()
+    def _capabilities_helper(self, unit: Unit) -> set[ColorMode]:
+        supported: set[ColorMode] = set()
         unit_modes = [uc.type for uc in unit.unitType.controls]
 
         if UnitControlType.RGB in unit_modes and UnitControlType.WHITE in unit_modes:
@@ -104,7 +104,7 @@ class CasambiLight(CasambiEntity, LightEntity, metaclass=ABCMeta):
 
         return supported
 
-    def _mode_helper(self, modes: set[ColorMode] | set[str] | None) -> str:
+    def _mode_helper(self, modes: set[ColorMode] | set[str] | None) -> ColorMode:
         if modes:
             if ColorMode.RGBW in modes:
                 return ColorMode.RGBW
@@ -122,7 +122,7 @@ class CasambiLight(CasambiEntity, LightEntity, metaclass=ABCMeta):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the entity of."""
-        await self._api.casa.setLevel(self._obj, 0)
+        await self._api.casa.turnOff(self._obj)
 
 
 class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
@@ -134,8 +134,8 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
 
         temp_control = unit.unitType.get_control(UnitControlType.TEMPERATURE)
         if temp_control is not None:
-            self._attr_min_color_temp_kelvin = temp_control.min
-            self._attr_max_color_temp_kelvin = temp_control.max
+            self._attr_min_color_temp_kelvin = temp_control.min  # type: ignore[assignment]
+            self._attr_max_color_temp_kelvin = temp_control.max  # type: ignore[assignment]
 
         desc = TypedEntityDescription(key=unit.uuid, name=None, entity_type="light")
 
@@ -227,18 +227,6 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
         else:
             await self._api.casa.turnOn(self._obj)
 
-    async def async_turn_off(self, **kwargs: Any) -> None:
-        """Turn off the unit."""
-        # HACK: Try to get lights only supporting ONOFF to turn off.
-        # SetLevel doesn't seem to work for unknown reasons.
-        if self.color_mode == ColorMode.ONOFF:
-            unit = cast("Unit", self._obj)
-            await self._api.casa._send(  # noqa: SLF001
-                unit, bytes(unit.unitType.stateLength), _operation.OpCode.SetState
-            )
-        else:
-            await super().async_turn_off(**kwargs)
-
 
 class CasambiLightGroup(CasambiLight, CasambiNetworkGroup):
     """Defines a Casambi group entity."""
@@ -247,17 +235,9 @@ class CasambiLightGroup(CasambiLight, CasambiNetworkGroup):
         """Initialize a Casambi group entity."""
 
         # Find union of supported color modes.
-        supported_modes: set[str] = set()
+        supported_modes: set[ColorMode] = set()
         for unit in group.units:
             supported_modes = supported_modes.union(self._capabilities_helper(unit))
-
-        # Color temperature for groups isn't supported yet.
-        # Open problems:
-        #  - How do we determine min and max temperature? Is it the union or intersection of the intervals?
-        #    We can't really scale the temperature since we don't have a min or max.
-        #  - How does the SetTemperature opcode work (for casambi-bt)?
-        if ColorMode.COLOR_TEMP in supported_modes:
-            supported_modes.remove(ColorMode.COLOR_TEMP)
 
         if len(supported_modes) == 0:
             supported_modes.add(ColorMode.UNKNOWN)
@@ -332,6 +312,11 @@ class CasambiLightGroup(CasambiLight, CasambiNetworkGroup):
         was_set = False
         if ATTR_BRIGHTNESS in kwargs:
             await self._api.casa.setLevel(self._obj, kwargs[ATTR_BRIGHTNESS])
+            was_set = True
+        if ATTR_COLOR_TEMP_KELVIN in kwargs:
+            await self._api.casa.setTemperature(
+                self._obj, kwargs[ATTR_COLOR_TEMP_KELVIN]
+            )
             was_set = True
         if ATTR_RGB_COLOR in kwargs:
             await self._api.casa.setColor(self._obj, kwargs[ATTR_RGB_COLOR])
