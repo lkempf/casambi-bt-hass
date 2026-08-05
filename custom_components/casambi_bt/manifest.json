@@ -1,6 +1,6 @@
 {
   "domain": "casambi_bt",
-  "name": "Casambi Bluetooth",
+  "name": "Casambi Bluetooth (HA 2026.6+ Fixed)",
   "bluetooth": [
     {
       "service_uuid": "0000fe4d-0000-1000-8000-00805f9b34fb",
@@ -8,12 +8,14 @@
       "connectable": true
     }
   ],
-  "codeowners": ["@lkempf"],
+  "codeowners": ["@drschnalli"],
   "config_flow": true,
   "dependencies": ["bluetooth_adapters"],
-  "documentation": "https://github.com/lkempf/casambi-bt-hass",
+  "documentation": "https://github.com/drschnalli/casambi-bt-hass",
   "integration_type": "hub",
   "iot_class": "local_push",
-  "requirements": ["casambi-bt==0.4.0b3"],
-  "version": "0.3.0"
+  "issue_tracker": "https://github.com/drschnalli/casambi-bt-hass/issues",
+  "requirements": ["casambi-bt==0.3.2"],
+  "version": "0.3.0-ha2026.6-fix",
+  "homeassistant": "2024.1.0"
 }
