@@ -163,7 +163,7 @@ class CasambiApi:
                 raise HomeAssistantError from err
 
             await asyncio.sleep(backoff)
-            backoff = max(RECONNECT_BACKOFF_MAX, backoff * RECONNECT_BACKOFF_STEP)
+            backoff = min(RECONNECT_BACKOFF_MAX, backoff * RECONNECT_BACKOFF_STEP)
 
     @property
     def available(self) -> bool:
