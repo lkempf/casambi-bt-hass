@@ -14,6 +14,7 @@ from CasambiBt.errors import (
     AuthenticationError,
     BluetoothDeviceNotFoundError,
     BluetoothError,
+    ProtocolError,
 )
 
 from homeassistant.components import bluetooth
@@ -136,6 +137,7 @@ class CasambiApi:
     async def reconnect(self) -> None:
         """Start reconnection attempt to the Casmabi network."""
         backoff = RECONNECT_BACKOFF_START
+        protocol_error = False
         while True:
             try:
                 device = bluetooth.async_ble_device_from_address(
@@ -145,6 +147,7 @@ class CasambiApi:
                     raise BluetoothDeviceNotFoundError  # noqa: TRY301
 
                 await self._casa.reconnect(device)
+                protocol_error = False
                 break
             except BluetoothError:
                 _LOGGER.debug(
@@ -160,6 +163,13 @@ class CasambiApi:
             except asyncio.CancelledError:
                 _LOGGER.debug("Reconnect task cancelled.")
                 break
+            except ProtocolError as err:
+                # We retry once on Protocol errors to make sure they aren't permanent.
+                if not protocol_error:
+                    _LOGGER.debug("Retrying once on protocol error.", exc_info=True)
+                    protocol_error = True
+                else:
+                    raise HomeAssistantError from err
             except Exception as err:  # pylint: disable=broad-except
                 raise HomeAssistantError from err
 
