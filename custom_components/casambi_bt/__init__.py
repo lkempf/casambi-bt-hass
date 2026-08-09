@@ -152,8 +152,9 @@ class CasambiApi:
                     exc_info=True,
                 )
             except BluetoothDeviceNotFoundError:
-                # If we can't find the network we don't want to retry. HA will notify us.
-                break
+                # Sometimes HA notifications seem not to work.
+                # We are still registered for HA notifications but retrying very seldomly should be fine.
+                backoff = max(backoff, 60)
             except AuthenticationError as err:
                 raise HomeAssistantError from err
             except asyncio.CancelledError:
