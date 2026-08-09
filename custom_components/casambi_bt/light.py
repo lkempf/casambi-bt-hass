@@ -1,7 +1,5 @@
 """Support for Casambi compatible lights."""
 
-from __future__ import annotations
-
 from abc import ABCMeta
 from copy import copy
 import logging

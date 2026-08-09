@@ -1,7 +1,5 @@
 """The Casambi Bluetooth integration."""
 
-from __future__ import annotations
-
 import asyncio
 from collections.abc import Callable, Iterable
 import inspect
@@ -220,7 +218,7 @@ class CasambiApi:
                 _LOGGER.debug(
                     "Timeout while cancelling reconnect as part of disconnect."
                 )
-            except Exception:  # noqa: BLE001
+            except Exception:
                 _LOGGER.debug(
                     "Got exception when cancelling reconnect. Ignoring.", exc_info=True
                 )
