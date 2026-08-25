@@ -36,9 +36,23 @@ CASA_LIGHT_CTRL_TYPES: Final[list[UnitControlType]] = [
     UnitControlType.WHITE,
     UnitControlType.ONOFF,
     UnitControlType.TEMPERATURE,
+    UnitControlType.SLIDER,
 ]
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _is_slider_only(unit: Unit) -> bool:
+    """Return True if the brightness of a unit is only reachable via SLIDER.
+
+    Some fixtures expose their channels as ``slider`` controls and have no
+    ``dimmer`` control at all, e.g. the Entity Elettronica EN1812 in
+    ``EXT/Elements`` mode which reports eight ``slider`` controls.
+    """
+    return (
+        unit.unitType.get_control(UnitControlType.DIMMER) is None
+        and unit.unitType.get_control(UnitControlType.SLIDER) is not None
+    )
 
 
 async def async_setup_entry(
@@ -93,7 +107,10 @@ class CasambiLight(CasambiEntity, LightEntity, metaclass=ABCMeta):
             supported.add(ColorMode.XY)
 
         if len(supported) == 0:
-            if UnitControlType.DIMMER in unit_modes:
+            if (
+                UnitControlType.DIMMER in unit_modes
+                or UnitControlType.SLIDER in unit_modes
+            ):
                 supported.add(ColorMode.BRIGHTNESS)
             elif UnitControlType.ONOFF in unit_modes:
                 supported.add(ColorMode.ONOFF)
@@ -143,15 +160,23 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
     @property
     def is_on(self) -> bool:
         """Return True if the unit is on."""
-        return self._obj.is_on
+        unit = cast("Unit", self._obj)
+        # Unit.is_on has branches for ONOFF and DIMMER but none for SLIDER, so a
+        # slider-only unit falls through to the raw protocol flag, which stays
+        # True while the slider sits at 0. Mirror the DIMMER branch here.
+        if _is_slider_only(unit) and unit.state is not None:
+            return unit.is_on and bool(unit.state.slider)
+        return unit.is_on
 
     @property
     def brightness(self) -> int | None:
         """Return the brightness of the unit."""
         unit = cast("Unit", self._obj)
-        if unit.state is not None:
-            return unit.state.dimmer
-        return None
+        if unit.state is None:
+            return None
+        if _is_slider_only(unit):
+            return unit.state.slider
+        return unit.state.dimmer
 
     @property
     def rgb_color(self) -> tuple[int, int, int] | None:
@@ -200,7 +225,10 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
         # we only ever get a single color attribute but there may be other non-color ones.
         set_state = False
         if ATTR_BRIGHTNESS in kwargs:
-            state.dimmer = kwargs[ATTR_BRIGHTNESS]
+            if _is_slider_only(unit):
+                state.slider = kwargs[ATTR_BRIGHTNESS]
+            else:
+                state.dimmer = kwargs[ATTR_BRIGHTNESS]
             set_state = True
         if ATTR_RGBW_COLOR in kwargs:
             state.rgb = kwargs[ATTR_RGBW_COLOR][:3]
@@ -220,10 +248,31 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
             state.colorsource = ColorSource.XY
             set_state = True
 
+        # Casambi.turnOn() asks the unit to restore its last level, which a unit
+        # without a DIMMER control doesn't track. Drive the slider instead.
+        if not set_state and _is_slider_only(unit):
+            state.slider = UnitState.SLIDER_MAX
+            set_state = True
+
         if set_state:
             await self._api.casa.setUnitState(unit, state)
         else:
             await self._api.casa.turnOn(self._obj)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Turn off the unit."""
+        unit = cast("Unit", self._obj)
+        # Casambi.turnOff() falls back to setLevel() for units without an ONOFF
+        # control, which has nothing to act on without a DIMMER control either.
+        if _is_slider_only(unit):
+            state = copy(unit.state)
+            if not state:
+                state = UnitState()
+            state.slider = 0
+            await self._api.casa.setUnitState(unit, state)
+            return
+
+        await super().async_turn_off(**kwargs)
 
 
 class CasambiLightGroup(CasambiLight, CasambiNetworkGroup):
