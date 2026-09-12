@@ -1,12 +1,13 @@
 """Common functionality for entities."""
 
+import logging
 from abc import ABCMeta
 from dataclasses import dataclass
-import logging
 from typing import Final, cast
 
-from CasambiBt import Group as CasambiGroup, Scene as CasambiScene, Unit as CasambiUnit
-
+from CasambiBt import Group as CasambiGroup
+from CasambiBt import Scene as CasambiScene
+from CasambiBt import Unit as CasambiUnit
 from homeassistant.core import callback
 from homeassistant.helpers import device_registry
 from homeassistant.helpers.entity import DeviceInfo, Entity, EntityDescription
@@ -166,7 +167,11 @@ class CasambiUnitEntity(CasambiEntity, metaclass=ABCMeta):
             model=unit.unitType.model,
             sw_version=unit.firmwareVersion,
             identifiers={(DOMAIN, unit.uuid)},
-            via_device=(DOMAIN, self._api.casa.networkId),
+            via_device_id=device_registry.async_get_device_id_by_identifier(
+                self.hass,
+                (DOMAIN, self._api.casa.networkId),
+                config_entry_id=self._api.conf_entry.entry_id,
+            ),
         )
 
     @property
