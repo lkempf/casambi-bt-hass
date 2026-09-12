@@ -46,6 +46,34 @@ Not supported yet:
 - Switches
 - Sensors
 
+## Linux / BlueZ passive scanning
+
+When using a local Bluetooth adapter on Linux, passive scanning requires
+BlueZ to expose the `org.bluez.AdvertisementMonitorManager1` D-Bus interface.
+
+BlueZ currently marks this interface as experimental. On distributions where
+experimental D-Bus interfaces are disabled, Home Assistant may therefore
+detect the adapter as not supporting passive scanning and fall back to active
+scanning.
+
+If passive scanning is not available, enable the BlueZ experimental D-Bus
+interfaces in `/etc/bluetooth/main.conf`:
+
+```ini
+[General]
+Experimental = true
+```
+
+Then restart BlueZ and Home Assistant.
+
+The interface can be checked with:
+
+```
+busctl introspect org.bluez /org/bluez/hci0 | grep AdvertisementMonitorManager
+```
+
+KernelExperimental does not need to be enabled for this.
+
 ## Reporting issues
 
 Before reporting issues make sure that you have the debug log enabled for all relevant components. This can be done by placing the following in `configuration.yaml` of your HA installation:
