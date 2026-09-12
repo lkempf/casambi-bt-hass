@@ -1,13 +1,12 @@
 """Common functionality for entities."""
 
-import logging
 from abc import ABCMeta
 from dataclasses import dataclass
+import logging
 from typing import Final, cast
 
-from CasambiBt import Group as CasambiGroup
-from CasambiBt import Scene as CasambiScene
-from CasambiBt import Unit as CasambiUnit
+from CasambiBt import Group as CasambiGroup, Scene as CasambiScene, Unit as CasambiUnit
+
 from homeassistant.core import callback
 from homeassistant.helpers import device_registry
 from homeassistant.helpers.entity import DeviceInfo, Entity, EntityDescription
