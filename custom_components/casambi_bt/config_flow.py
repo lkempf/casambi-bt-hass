@@ -193,7 +193,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
 
             try:
-                await _validate_input(self.hass, user_input)
+                await _validate_input(self.hass, data)
             except NetworkNotFoundError:
                 errors["base"] = "cannot_connect"
             except AuthenticationError:
