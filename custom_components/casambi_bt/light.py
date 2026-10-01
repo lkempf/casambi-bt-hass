@@ -237,8 +237,18 @@ class CasambiLightGroup(CasambiLight, CasambiNetworkGroup):
         for unit in group.units:
             supported_modes = supported_modes.union(self._capabilities_helper(unit))
 
+        # ONOFF, BRIGHTNESS and UNKNOWN stand for "nothing better known".
+        # Home Assistant rejects them next to a real color mode, which is what
+        # a group mixing e.g. a plain dimmer and an RGB luminaire produces, so
+        # keep only the modes the group can actually use.
+        supported_modes.discard(ColorMode.UNKNOWN)
+        if len(supported_modes) > 1:
+            supported_modes.discard(ColorMode.ONOFF)
+        if len(supported_modes) > 1:
+            supported_modes.discard(ColorMode.BRIGHTNESS)
+
         if len(supported_modes) == 0:
-            supported_modes.add(ColorMode.UNKNOWN)
+            supported_modes.add(ColorMode.ONOFF)
         self._attr_supported_color_modes = supported_modes
 
         desc = TypedEntityDescription(
