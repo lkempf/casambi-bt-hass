@@ -101,6 +101,10 @@ class CasambiApi:
         self.casa = cast(Casambi, CasambiProxy(self, self._casa))
 
         self._callback_map: dict[int, list[Callable[[Unit], None]]] = {}
+        self._connection_callbacks: list[Callable[[], None]] = []
+        # The library runs its disconnect callbacks while it still reports
+        # itself as connected, so the link state is tracked here instead.
+        self._link_up = False
         self._cancel_bluetooth_callback: Callable[[], None] | None = None
         self._reconnect_task: asyncio.Task | None = None
 
@@ -125,6 +129,7 @@ class CasambiApi:
             self._casa.registerUnitChangedHandler(self._unit_changed_handler)
 
             await self._casa.connect(device, self.password)
+            self._link_up = True
         except BluetoothError as err:
             raise ConfigEntryNotReady("Failed to use bluetooth") from err
         except BluetoothDeviceNotFoundError as err:
@@ -158,6 +163,8 @@ class CasambiApi:
                     raise BluetoothDeviceNotFoundError  # noqa: TRY301
 
                 await self._casa.reconnect(device)
+                self._link_up = True
+                self._notify_connection_state()
                 protocol_error = False
                 break
             except BluetoothError:
@@ -190,7 +197,7 @@ class CasambiApi:
     @property
     def available(self) -> bool:
         """Return True if the controller is available."""
-        return self._casa.connected
+        return self._link_up and self._casa.connected
 
     def get_units(
         self, control_types: list[UnitControlType] | None = None
@@ -217,6 +224,7 @@ class CasambiApi:
 
     async def disconnect(self) -> None:
         """Disconnects from the controller and disables automatic reconnect."""
+        self._link_up = False
         if (
             self._reconnect_task is not None
             and not self._reconnect_task.cancelled()
@@ -252,7 +260,28 @@ class CasambiApi:
 
     @callback
     def _casa_disconnect(self) -> None:
+        self._link_up = False
+        self._notify_connection_state()
         self._schedule_reconnect()
+
+    def register_connection_updates(self, c: Callable[[], None]) -> None:
+        """Register a callback for changes of the connection state.
+
+        :param c: The callback.
+        """
+        self._connection_callbacks.append(c)
+
+    def unregister_connection_updates(self, c: Callable[[], None]) -> None:
+        """Unregister a callback for changes of the connection state.
+
+        :param c: The callback.
+        """
+        self._connection_callbacks.remove(c)
+
+    @callback
+    def _notify_connection_state(self) -> None:
+        for c in self._connection_callbacks:
+            c()
 
     def register_unit_updates(self, unit: Unit, c: Callable[[Unit], None]) -> None:
         """Register a callback for unit updates.
@@ -283,7 +312,7 @@ class CasambiApi:
         service_info: bluetooth.BluetoothServiceInfoBleak,
         _change: bluetooth.BluetoothChange,
     ) -> None:
-        if not self._casa.connected and service_info.connectable:
+        if not self.available and service_info.connectable:
             self._schedule_reconnect()
 
     def _schedule_reconnect(self) -> None:
