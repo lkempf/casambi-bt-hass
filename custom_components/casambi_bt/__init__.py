@@ -154,6 +154,12 @@ class CasambiApi:
         """Start reconnection attempt to the Casmabi network."""
         backoff = RECONNECT_BACKOFF_START
         protocol_error = False
+
+        # The task starts eagerly, inside the library's disconnect callback,
+        # where the library still reports itself connected and would return
+        # from reconnect() at once. Let it finish tearing down first.
+        await asyncio.sleep(0)
+
         while True:
             try:
                 device = bluetooth.async_ble_device_from_address(
@@ -163,6 +169,10 @@ class CasambiApi:
                     raise BluetoothDeviceNotFoundError  # noqa: TRY301
 
                 await self._casa.reconnect(device)
+                if not self._casa.connected:
+                    raise BluetoothError(  # noqa: TRY301
+                        "Reconnect returned without a connection."
+                    )
                 self._link_up = True
                 self._notify_connection_state()
                 protocol_error = False
