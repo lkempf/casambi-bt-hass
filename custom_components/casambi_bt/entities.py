@@ -75,6 +75,18 @@ class CasambiNetworkEntity(CasambiEntity, metaclass=ABCMeta):
         name += f"-{self.entity_description.key}"
         return name
 
+    async def async_added_to_hass(self) -> None:
+        """Follow the connection state of the network."""
+        self._api.register_connection_updates(self._connection_callback)
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Stop following the connection state of the network."""
+        self._api.unregister_connection_updates(self._connection_callback)
+
+    @callback
+    def _connection_callback(self) -> None:
+        self.async_write_ha_state()
+
     @property
     def device_info(self) -> DeviceInfo:
         """Return device information about this Casambi entity."""
@@ -129,6 +141,7 @@ class CasambiNetworkGroup(CasambiNetworkEntity, metaclass=ABCMeta):
 
     async def async_added_to_hass(self) -> None:
         """Run when the group is about to be added to hass."""
+        await super().async_added_to_hass()
         group = cast("CasambiGroup", self._obj)
         for unit in group.units:
             self._api.register_unit_updates(unit, self._change_callback)
@@ -138,6 +151,7 @@ class CasambiNetworkGroup(CasambiNetworkEntity, metaclass=ABCMeta):
         group = cast("CasambiGroup", self._obj)
         for unit in group.units:
             self._api.unregister_unit_updates(unit, self._change_callback)
+        await super().async_will_remove_from_hass()
 
 
 class CasambiUnitEntity(CasambiEntity, metaclass=ABCMeta):
