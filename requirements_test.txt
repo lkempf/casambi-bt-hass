@@ -1,0 +1,12 @@
+pytest-homeassistant-custom-component
+casambi-bt==0.4.0b5
+# Requirements of the bluetooth and usb components imported by the integration.
+aiousbwatcher
+bleak
+bleak-retry-connector
+bluetooth-adapters
+bluetooth-auto-recovery
+bluetooth-data-tools
+dbus-fast
+habluetooth
+pyserial

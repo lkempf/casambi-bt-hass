@@ -43,8 +43,68 @@ Supported control types:
 - Vertical
 
 Not supported yet:
-- Switches
+- Switches as entities (button events are available, see [Switch events](#switch-events))
 - Sensors
+
+## Switch events
+
+Button actions from Casambi switches are fired on the Home Assistant event bus as `casambi_bt_switch_event`.
+The integration only listens to these events. The switch keeps controlling the Casambi network as configured in the Casambi app.
+
+Event data:
+
+| Key | Description |
+| --- | --- |
+| `entry_id` | Config entry of the Casambi network that received the event. |
+| `device_id` | Home Assistant device of the switch unit, or `null` if the unit has no device in Home Assistant. |
+| `unit_id` | Id of the switch unit within the Casambi network. |
+| `unit_uuid` | Unique id of the switch unit, or `null` if the unit is unknown. |
+| `unit_name` | Name of the switch unit in the Casambi app, or `null` if the unit is unknown. |
+| `button` | Button number reported by the switch (starting at 1). |
+| `event` | One of `press`, `release`, `hold`, `release_after_hold` or `unknown`. |
+
+Which `button` number belongs to which physical button depends on the switch.
+Open *Developer tools* -> *Events*, listen to `casambi_bt_switch_event` and press the buttons to find the values for your switch.
+
+Every press is forwarded, so quick presses can be combined in automations.
+There is no native double click event. This example runs a different action for one or two short presses:
+
+```yaml
+alias: Casambi switch single or double press
+mode: single
+max_exceeded: silent
+triggers:
+  - trigger: event
+    event_type: casambi_bt_switch_event
+    event_data:
+      unit_id: 12 # Replace with the values from your switch
+      button: 1
+      event: press
+actions:
+  - wait_for_trigger:
+      - trigger: event
+        event_type: casambi_bt_switch_event
+        event_data:
+          unit_id: 12
+          button: 1
+          event: press
+    timeout:
+      milliseconds: 600
+    continue_on_timeout: true
+  - if:
+      - condition: template
+        value_template: "{{ wait.trigger is not none }}"
+    then:
+      - action: light.toggle # Double press
+        target:
+          entity_id: light.example
+    else:
+      - action: scene.turn_on # Single press
+        target:
+          entity_id: scene.example
+```
+
+Long presses also start with a `press` event, so this example counts a long press as a single press.
 
 ## Linux / BlueZ passive scanning
 
