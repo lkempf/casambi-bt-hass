@@ -5,7 +5,8 @@ from copy import copy
 import logging
 from typing import Any, Final, cast
 
-from CasambiBt import ColorSource, Group, Unit, UnitControlType, UnitState
+from CasambiBt import ColorSource, Group, Unit, UnitControl, UnitControlType, UnitState
+from CasambiBt._operation import OpCode
 
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
@@ -52,6 +53,18 @@ async def async_setup_entry(
     light_entities: list[CasambiLight] = [
         CasambiLightUnit(casa_api, u) for u in casa_api.get_units(CASA_LIGHT_CTRL_TYPES)
     ]
+
+    # Units with several DIMMER controls (e.g. direct/indirect luminaires)
+    # get one additional entity per extra channel. The main unit entity
+    # keeps controlling the last channel, which is what the library parses
+    # into `UnitState.dimmer`, so existing entities keep their behaviour.
+    for u in casa_api.get_units(CASA_LIGHT_CTRL_TYPES):
+        if _is_multi_channel(u):
+            dimmers = _dimmer_controls(u)
+            light_entities.extend(
+                CasambiLightChannel(casa_api, u, ctrl, idx)
+                for idx, ctrl in enumerate(dimmers[:-1])
+            )
 
     group_entities: list[CasambiLight] = []
     if config_entry.data[CONF_IMPORT_GROUPS]:
@@ -143,12 +156,17 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
     @property
     def is_on(self) -> bool:
         """Return True if the unit is on."""
-        return self._obj.is_on
+        unit = cast("Unit", self._obj)
+        if _is_multi_channel(unit):
+            return _channel_is_on(unit, _dimmer_controls(unit)[-1])
+        return unit.is_on
 
     @property
     def brightness(self) -> int | None:
         """Return the brightness of the unit."""
         unit = cast("Unit", self._obj)
+        if _is_multi_channel(unit):
+            return _read_channel(unit, _dimmer_controls(unit)[-1])
         if unit.state is not None:
             return unit.state.dimmer
         return None
@@ -192,6 +210,18 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the unit."""
         unit = cast("Unit", self._obj)
+
+        # Multi-channel unit: only set the main (last) channel and leave the
+        # other channels untouched.
+        if _is_multi_channel(unit):
+            await _async_set_channel(
+                self._api,
+                unit,
+                _dimmer_controls(unit)[-1],
+                kwargs.get(ATTR_BRIGHTNESS),
+            )
+            return
+
         state = copy(unit.state)
         if not state:
             state = UnitState()
@@ -224,6 +254,154 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
             await self._api.casa.setUnitState(unit, state)
         else:
             await self._api.casa.turnOn(self._obj)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Turn off the unit (multi-channel units: only the main channel)."""
+        unit = cast("Unit", self._obj)
+        if _is_multi_channel(unit):
+            await _async_set_channel(self._api, unit, _dimmer_controls(unit)[-1], 0)
+            return
+        await self._api.casa.turnOff(self._obj)
+
+
+# Multi-channel support (units with several DIMMER controls).
+#
+# The library only keeps a single `dimmer` value in `UnitState` (the last
+# DIMMER control wins while parsing) and `getStateAsBytes` writes that value
+# to every DIMMER control. The helpers below read and write the raw state
+# bytes instead, so each channel can be controlled independently. Only
+# Evolution networks are supported since classic networks have no SetState.
+
+_CHANNEL_LAST_LEVEL: dict[tuple[str, int], int] = {}
+
+
+def _dimmer_controls(unit: Unit) -> list[UnitControl]:
+    """Return the DIMMER controls of a unit sorted by offset."""
+    return sorted(
+        (c for c in unit.unitType.controls if c.type == UnitControlType.DIMMER),
+        key=lambda c: c.offset,
+    )
+
+
+def _is_multi_channel(unit: Unit) -> bool:
+    """Return True if the unit has more than one independent DIMMER channel."""
+    if getattr(unit, "_isClassic", False):
+        return False
+    return len(_dimmer_controls(unit)) > 1
+
+
+def _raw_state(unit: Unit) -> bytes | None:
+    if unit.state is None:
+        return None
+    return unit.state.raw_state
+
+
+def _channel_is_on(unit: Unit, ctrl: UnitControl) -> bool:
+    return bool(unit._on) and (_read_channel(unit, ctrl) or 0) > 0  # noqa: SLF001
+
+
+def _read_channel(unit: Unit, ctrl: UnitControl) -> int | None:
+    raw = _raw_state(unit)
+    if raw is None:
+        return None
+    whole = int.from_bytes(raw, byteorder="little", signed=False)
+    val = (whole >> ctrl.offset) & (2**ctrl.length - 1)
+    return val << (8 - ctrl.length) if ctrl.length <= 8 else val
+
+
+def _unit_any_on(unit: Unit) -> bool:
+    """Return True if any DIMMER channel of the unit is on."""
+    if not unit._on:  # noqa: SLF001
+        return False
+    return any((_read_channel(unit, c) or 0) > 0 for c in _dimmer_controls(unit))
+
+
+async def _async_set_channel(
+    api: CasambiApi, unit: Unit, ctrl: UnitControl, brightness: int | None
+) -> None:
+    """Set one DIMMER channel of a unit and keep the other channels.
+
+    If the unit is currently off the other channels are kept off.
+    """
+    dimmers = _dimmer_controls(unit)
+    key = (unit.uuid, ctrl.offset)
+    current = _read_channel(unit, ctrl) or 0
+    any_on = _unit_any_on(unit)
+    if current > 0 and any_on:
+        _CHANNEL_LAST_LEVEL[key] = current
+
+    if brightness is None:
+        if any_on and current > 0:
+            brightness = current
+        else:
+            brightness = _CHANNEL_LAST_LEVEL.get(key, 255)
+
+    raw = _raw_state(unit)
+    length = max(unit.unitType.stateLength, len(raw or b""))
+    whole = int.from_bytes(raw or bytes(length), "little", signed=False)
+    for c in dimmers:
+        if c.offset == ctrl.offset:
+            val = brightness >> (8 - c.length) if c.length <= 8 else brightness
+        elif not any_on:
+            val = 0
+        else:
+            continue
+        mask = (2**c.length - 1) << c.offset
+        whole = (whole & ~mask) | ((val << c.offset) & mask)
+
+    if not any(((whole >> c.offset) & (2**c.length - 1)) > 0 for c in dimmers):
+        await api.casa.turnOff(unit)
+        return
+
+    payload = whole.to_bytes(length, "little", signed=False)
+    _LOGGER.debug("Setting channel %i of %s to %s", ctrl.offset, unit.name, payload)
+    await api.casa._send(unit, payload, OpCode.SetState)  # noqa: SLF001
+
+
+class CasambiLightChannel(CasambiLight, CasambiUnitEntity):
+    """Additional DIMMER channel of a multi-channel unit (e.g. indirect light)."""
+
+    def __init__(
+        self, api: CasambiApi, unit: Unit, ctrl: UnitControl, idx: int
+    ) -> None:
+        """Initialize the channel entity."""
+        self._ctrl = ctrl
+        self._attr_supported_color_modes = {ColorMode.BRIGHTNESS}
+        desc = TypedEntityDescription(
+            key=f"{unit.uuid}-ch{ctrl.offset}",
+            name=f"Channel {idx + 1}",
+            entity_type="light",
+        )
+        self._obj: Unit
+        super().__init__(api, desc, unit)
+
+    @property
+    def unique_id(self) -> str:
+        """Return an unique identifier for the channel."""
+        unit = cast("Unit", self._obj)
+        return (
+            f"{self._api.casa.networkId}-unit-{unit.uuid}-light-ch{self._ctrl.offset}"
+        )
+
+    @property
+    def is_on(self) -> bool:
+        """Return True if this channel is on."""
+        return _channel_is_on(cast("Unit", self._obj), self._ctrl)
+
+    @property
+    def brightness(self) -> int | None:
+        """Return the brightness of this channel."""
+        return _read_channel(cast("Unit", self._obj), self._ctrl)
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Turn on this channel."""
+        await _async_set_channel(
+            self._api, cast("Unit", self._obj), self._ctrl, kwargs.get(ATTR_BRIGHTNESS)
+        )
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Turn off this channel."""
+        await _async_set_channel(self._api, cast("Unit", self._obj), self._ctrl, 0)
 
 
 class CasambiLightGroup(CasambiLight, CasambiNetworkGroup):
