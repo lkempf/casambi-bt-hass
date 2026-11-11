@@ -15,7 +15,13 @@ ruff check .
 black . --check
 ```
 
-For `casambi-bt` also run `mypy .`. All of these tools should be available when following the recommended setup procedure.
+For `casambi-bt` also run `mypy .`.
+
+Tests for the integration can be run with [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv run --no-project --with-requirements requirements_test.txt pytest
+``` All of these tools should be available when following the recommended setup procedure.
 
 ## Development setup
 

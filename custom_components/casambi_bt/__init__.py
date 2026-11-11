@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Final, cast
 
 from CasambiBt import Casambi, Group, Scene, Unit, UnitControlType
+from CasambiBt._switch import SwitchEvent
 from CasambiBt.errors import (
     AuthenticationError,
     BluetoothDeviceNotFoundError,
@@ -25,11 +26,13 @@ from homeassistant.exceptions import (
     ConfigEntryNotReady,
     HomeAssistantError,
 )
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers.httpx_client import get_async_client
 
 from .const import (
     DOMAIN,
+    EVENT_SWITCH,
     PLATFORMS,
     RECONNECT_BACKOFF_MAX,
     RECONNECT_BACKOFF_START,
@@ -123,6 +126,7 @@ class CasambiApi:
 
             self._casa.registerDisconnectCallback(self._casa_disconnect)
             self._casa.registerUnitChangedHandler(self._unit_changed_handler)
+            self._casa.registerSwitchEventHandler(self._switch_event_handler)
 
             await self._casa.connect(device, self.password)
         except BluetoothError as err:
@@ -249,6 +253,7 @@ class CasambiApi:
         except Exception:
             _LOGGER.exception("Error during disconnect.")
         self._casa.unregisterUnitChangedHandler(self._unit_changed_handler)
+        self._casa.unregisterSwitchEventHandler(self._switch_event_handler)
 
     @callback
     def _casa_disconnect(self) -> None:
@@ -276,6 +281,35 @@ class CasambiApi:
             return
         for c in self._callback_map[unit.deviceId]:
             c(unit)
+
+    @callback
+    def _switch_event_handler(self, event: SwitchEvent) -> None:
+        """Forward a switch event from the Casambi network to the HA event bus.
+
+        Retransmissions are already filtered by casambi-bt.
+        Every event is forwarded so that quick consecutive presses are preserved.
+        """
+        unit = next((u for u in self._casa.units if u.deviceId == event.unit_id), None)
+        device_id: str | None = None
+        if unit is not None:
+            device = dr.async_get(self.hass).async_get_device(
+                identifiers={(DOMAIN, unit.uuid)}
+            )
+            if device is not None:
+                device_id = device.id
+
+        self.hass.bus.async_fire(
+            EVENT_SWITCH,
+            {
+                "entry_id": self.conf_entry.entry_id,
+                "device_id": device_id,
+                "unit_id": event.unit_id,
+                "unit_uuid": unit.uuid if unit is not None else None,
+                "unit_name": unit.name if unit is not None else None,
+                "button": event.button,
+                "event": event.event.name.lower(),
+            },
+        )
 
     @callback
     def _bluetooth_callback(

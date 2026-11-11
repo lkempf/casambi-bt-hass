@@ -10,6 +10,8 @@ PLATFORMS = [Platform.BINARY_SENSOR, Platform.LIGHT, Platform.SCENE, Platform.NU
 
 CONF_IMPORT_GROUPS: Final = "import_groups"
 
+EVENT_SWITCH: Final = f"{DOMAIN}_switch_event"
+
 RECONNECT_BACKOFF_START: Final = 2
 RECONNECT_BACKOFF_STEP: Final = 2
 RECONNECT_BACKOFF_MAX: Final = 300
