@@ -1,6 +1,7 @@
 """Test the reconnect task behaviour."""
 
 import asyncio
+import logging
 from unittest.mock import AsyncMock, patch
 
 from CasambiBt.errors import AuthenticationError, BluetoothError, ProtocolError
@@ -204,3 +205,25 @@ async def test_reconnect_survives_persistent_errors(
     assert api.available
     # The second failure falls back to the maximum backoff.
     assert max(sleeps) >= RECONNECT_BACKOFF_MAX
+
+
+@pytest.mark.usefixtures("mock_bluetooth", "enable_bluetooth")
+async def test_connection_changes_logged_once(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Losing and regaining the connection must be logged once at info level."""
+    api = await _setup(hass, config_entry)
+    caplog.set_level(logging.INFO, logger="custom_components.casambi_bt")
+
+    mock_casambi.connected = False
+    api._casa_disconnect()  # noqa: SLF001
+    # A second disconnect notification while down must not log again.
+    api._casa_disconnect()  # noqa: SLF001
+    await drain(hass)
+
+    infos = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
+    assert infos.count("Lost connection to Casambi network AA:BB:CC:DD:EE:FF") == 1
+    assert infos.count("Reconnected to Casambi network AA:BB:CC:DD:EE:FF") == 1

@@ -16,6 +16,9 @@ from .entity import CasambiNetworkEntity
 
 _LOGGER = logging.getLogger(__name__)
 
+# The status sensor is push based and never polls.
+PARALLEL_UPDATES = 0
+
 
 NETWORK_SENSORS: tuple[BinarySensorEntityDescription, ...] = (
     BinarySensorEntityDescription(

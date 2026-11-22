@@ -75,5 +75,22 @@
         }
       }
     }
+  },
+  "exceptions": {
+    "network_not_found": {
+      "message": "The Casambi network {address} was not found. Make sure a bluetooth adapter or proxy is in range."
+    },
+    "bluetooth_error": {
+      "message": "Bluetooth communication with the Casambi network {address} failed."
+    },
+    "auth_failed": {
+      "message": "Authentication to the Casambi network {address} failed."
+    },
+    "unexpected_error": {
+      "message": "Unexpected error while connecting to the Casambi network {address}."
+    },
+    "write_failed": {
+      "message": "Sending the command to the Casambi network failed."
+    }
   }
 }

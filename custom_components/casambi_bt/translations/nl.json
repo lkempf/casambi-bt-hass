@@ -75,5 +75,22 @@
         }
       }
     }
+  },
+  "exceptions": {
+    "network_not_found": {
+      "message": "Het Casambi netwerk {address} is niet gevonden. Zorg dat een bluetooth adapter of proxy binnen bereik is."
+    },
+    "bluetooth_error": {
+      "message": "Bluetooth communicatie met het Casambi netwerk {address} is mislukt."
+    },
+    "auth_failed": {
+      "message": "Authenticatie bij het Casambi netwerk {address} is mislukt."
+    },
+    "unexpected_error": {
+      "message": "Onverwachte fout bij het verbinden met het Casambi netwerk {address}."
+    },
+    "write_failed": {
+      "message": "Het commando kon niet naar het Casambi netwerk worden verzonden."
+    }
   }
 }

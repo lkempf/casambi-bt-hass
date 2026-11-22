@@ -1,5 +1,6 @@
 """Test integration setup and unload."""
 
+import importlib
 from unittest.mock import AsyncMock, patch
 
 from CasambiBt import UnitControlType
@@ -60,6 +61,9 @@ async def test_setup_retry_on_connect_error(
     await hass.async_block_till_done()
 
     assert config_entry.state is ConfigEntryState.SETUP_RETRY
+    # The translated reason is shown on the integration page.
+    assert config_entry.reason is not None
+    assert "AA:BB:CC:DD:EE:FF" in config_entry.reason
 
 
 async def test_setup_auth_failed(
@@ -218,3 +222,27 @@ async def test_migrate_entry_from_future_version(hass: HomeAssistant) -> None:
     await hass.async_block_till_done()
 
     assert entry.state is ConfigEntryState.MIGRATION_ERROR
+
+
+@pytest.mark.parametrize("platform", ["binary_sensor", "light", "number", "scene"])
+def test_parallel_updates_declared(platform: str) -> None:
+    """Every entity platform must declare its parallel updates."""
+    module = importlib.import_module(f"custom_components.casambi_bt.{platform}")
+    assert module.PARALLEL_UPDATES == 0
+
+
+@pytest.mark.usefixtures("mock_casambi", "enable_bluetooth")
+async def test_setup_retry_network_not_found(
+    hass: HomeAssistant, config_entry: MockConfigEntry
+) -> None:
+    """A network that is not in range must schedule a setup retry."""
+    config_entry.add_to_hass(hass)
+    with patch(
+        "homeassistant.components.bluetooth.async_ble_device_from_address",
+        return_value=None,
+    ):
+        await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert config_entry.state is ConfigEntryState.SETUP_RETRY
+    assert "was not found" in config_entry.reason

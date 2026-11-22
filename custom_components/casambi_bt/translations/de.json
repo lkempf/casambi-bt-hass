@@ -75,5 +75,22 @@
         }
       }
     }
+  },
+  "exceptions": {
+    "network_not_found": {
+      "message": "Das Casambi Netzwerk {address} wurde nicht gefunden. Stelle sicher, dass ein Bluetooth Adapter oder Proxy in Reichweite ist."
+    },
+    "bluetooth_error": {
+      "message": "Die Bluetooth Kommunikation mit dem Casambi Netzwerk {address} ist fehlgeschlagen."
+    },
+    "auth_failed": {
+      "message": "Die Anmeldung am Casambi Netzwerk {address} ist fehlgeschlagen."
+    },
+    "unexpected_error": {
+      "message": "Unerwarteter Fehler beim Verbinden mit dem Casambi Netzwerk {address}."
+    },
+    "write_failed": {
+      "message": "Der Befehl konnte nicht an das Casambi Netzwerk gesendet werden."
+    }
   }
 }

@@ -2,11 +2,13 @@
 
 from unittest.mock import AsyncMock
 
-from CasambiBt.errors import BluetoothError
+from CasambiBt._constants import ConnectionState
+from CasambiBt.errors import BluetoothError, ConnectionStateError
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.casambi_bt import CasambiApi
+from custom_components.casambi_bt.const import DOMAIN
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
@@ -31,10 +33,37 @@ async def test_write_error_raises_and_schedules_reconnect(
 
     mock_casambi.setLevel = AsyncMock(side_effect=BluetoothError())
 
-    with pytest.raises(HomeAssistantError):
+    with pytest.raises(HomeAssistantError) as err:
         await api.casa.setLevel(None, 128)
+    assert err.value.translation_key == "write_failed"
 
     # A reconnect was scheduled and recovers the connection.
     await drain(hass)
     mock_casambi.reconnect.assert_awaited()
     assert api.available
+
+
+@pytest.mark.usefixtures("mock_bluetooth", "enable_bluetooth")
+async def test_library_error_raises_translated_error(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+) -> None:
+    """Other library errors must fail the action without a reconnect."""
+    config_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    api: CasambiApi = config_entry.runtime_data
+
+    mock_casambi.turnOn = AsyncMock(
+        side_effect=ConnectionStateError(
+            ConnectionState.AUTHENTICATED, ConnectionState.NONE
+        )
+    )
+
+    with pytest.raises(HomeAssistantError) as err:
+        await api.casa.turnOn(None)
+
+    assert err.value.translation_domain == DOMAIN
+    assert err.value.translation_key == "write_failed"
+    mock_casambi.reconnect.assert_not_awaited()
