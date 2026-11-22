@@ -3,11 +3,12 @@
 import asyncio
 from unittest.mock import AsyncMock, patch
 
-from CasambiBt.errors import BluetoothError
+from CasambiBt.errors import AuthenticationError, BluetoothError, ProtocolError
+import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.casambi_bt import CasambiApi
-from custom_components.casambi_bt.const import DOMAIN
+from custom_components.casambi_bt.const import DOMAIN, RECONNECT_BACKOFF_MAX
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 
@@ -138,3 +139,68 @@ async def test_disconnect_cancels_reconnect(
 
     assert api._reconnect_task is None or api._reconnect_task.done()  # noqa: SLF001
     assert not api.available
+
+
+async def test_reconnect_auth_error_starts_reauth(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    mock_bluetooth: AsyncMock,
+    config_entry: MockConfigEntry,
+    enable_bluetooth: None,
+) -> None:
+    """Rejected credentials while reconnecting must start the reauth flow."""
+    api = await _setup(hass, config_entry)
+
+    mock_casambi.connected = False
+    mock_casambi.reconnect = AsyncMock(side_effect=AuthenticationError())
+
+    api._schedule_reconnect()  # noqa: SLF001
+    await drain(hass)
+
+    mock_casambi.reconnect.assert_awaited_once()
+    flows = hass.config_entries.flow.async_progress()
+    assert len(flows) == 1
+    assert flows[0]["context"]["source"] == "reauth"
+    assert not api.available
+
+
+@pytest.mark.parametrize(
+    "errors",
+    [
+        [ProtocolError(), ProtocolError()],
+        [RuntimeError("boom"), RuntimeError("boom")],
+    ],
+)
+@pytest.mark.usefixtures("mock_bluetooth", "enable_bluetooth")
+async def test_reconnect_survives_persistent_errors(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+    errors: list[Exception],
+) -> None:
+    """Persistent errors must not kill the reconnect loop."""
+    api = await _setup(hass, config_entry)
+
+    attempts = []
+    sleeps: list[float] = []
+
+    async def _reconnect(_device):
+        attempts.append(_device)
+        if len(attempts) <= len(errors):
+            raise errors[len(attempts) - 1]
+        mock_casambi.connected = True
+
+    async def _sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    mock_casambi.connected = False
+    mock_casambi.reconnect = AsyncMock(side_effect=_reconnect)
+
+    with patch("custom_components.casambi_bt.asyncio.sleep", new=_sleep):
+        api._schedule_reconnect()  # noqa: SLF001
+        await drain(hass)
+
+    assert len(attempts) == len(errors) + 1
+    assert api.available
+    # The second failure falls back to the maximum backoff.
+    assert max(sleeps) >= RECONNECT_BACKOFF_MAX

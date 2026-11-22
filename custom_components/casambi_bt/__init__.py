@@ -24,10 +24,10 @@ from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
-    ConfigEntryError,
     ConfigEntryNotReady,
     HomeAssistantError,
 )
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers.httpx_client import get_async_client
 
@@ -53,6 +53,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await api.connect()
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = api
 
+    # Register the network (hub) device up front. Unit devices reference it
+    # through via_device_id, which must resolve no matter in which order the
+    # platforms are set up.
+    dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, api.casa.networkId)},
+        connections={(dr.CONNECTION_BLUETOOTH, api.address)},
+        manufacturer="Casambi",
+        model="Network",
+        name=api.casa.networkName,
+    )
+
     try:
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     except Exception:
@@ -69,11 +81,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
-    casa_api: CasambiApi = hass.data[DOMAIN][entry.entry_id]
-    await casa_api.disconnect()
-
+    # Keep the connection when a platform refused to unload. The entry stays
+    # loaded in that case and its remaining entities still need it.
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
+        casa_api: CasambiApi = hass.data[DOMAIN].pop(entry.entry_id)
+        await casa_api.disconnect()
 
     return unload_ok
 
@@ -174,7 +186,10 @@ class CasambiApi:
                 f"Failed to authenticate to network {self.address}"
             ) from err
         except Exception as err:  # pylint: disable=broad-except
-            raise ConfigEntryError(
+            # Most failures here are transient (cloud hiccups, a network
+            # update in progress, flaky bluetooth proxies). Retrying keeps
+            # the entry alive instead of failing it until a manual reload.
+            raise ConfigEntryNotReady(
                 f"Unexpected error creating network {self.address}"
             ) from err
 
@@ -187,6 +202,7 @@ class CasambiApi:
         """Start reconnection attempt to the Casmabi network."""
         backoff = RECONNECT_BACKOFF_START
         protocol_error = False
+        unexpected_error_logged = False
 
         # Safety margin: the library may still report itself connected while
         # its disconnect callback is running. Yield once so the teardown
@@ -214,7 +230,6 @@ class CasambiApi:
                     )
                 self._link_up = True
                 self._notify_connection_state()
-                protocol_error = False
                 break
             except BluetoothError:
                 _LOGGER.debug(
@@ -225,20 +240,38 @@ class CasambiApi:
                 # Sometimes HA notifications seem not to work.
                 # We are still registered for HA notifications but retrying very seldomly should be fine.
                 backoff = max(backoff, 60)
-            except AuthenticationError as err:
-                raise HomeAssistantError from err
-            except asyncio.CancelledError:
-                _LOGGER.debug("Reconnect task cancelled.")
+            except AuthenticationError:
+                # Retrying cannot fix wrong credentials. Hand over to the
+                # reauth flow which reloads the entry once it succeeds.
+                _LOGGER.warning(
+                    "Authentication to Casambi network %s failed while reconnecting",
+                    self.address,
+                )
+                self.conf_entry.async_start_reauth(self.hass)
                 break
-            except ProtocolError as err:
-                # We retry once on Protocol errors to make sure they aren't permanent.
-                if not protocol_error:
+            except Exception as err:  # pylint: disable=broad-except
+                # Never let the reconnect loop die: a dead loop leaves the
+                # integration unavailable until the user reloads it. Retry
+                # a protocol error once quickly, then fall back to the
+                # maximum backoff for any persistent error.
+                if isinstance(err, ProtocolError) and not protocol_error:
                     _LOGGER.debug("Retrying once on protocol error.", exc_info=True)
                     protocol_error = True
                 else:
-                    raise HomeAssistantError from err
-            except Exception as err:  # pylint: disable=broad-except
-                raise HomeAssistantError from err
+                    if not unexpected_error_logged:
+                        _LOGGER.warning(
+                            "Unexpected error while reconnecting to %s, retrying "
+                            "every %s seconds",
+                            self.address,
+                            RECONNECT_BACKOFF_MAX,
+                            exc_info=True,
+                        )
+                        unexpected_error_logged = True
+                    else:
+                        _LOGGER.debug(
+                            "Unexpected error while reconnecting.", exc_info=True
+                        )
+                    backoff = RECONNECT_BACKOFF_MAX
 
             # Add jitter so multiple config entries don't retry in lockstep.
             await asyncio.sleep(backoff + random.uniform(0, 1))

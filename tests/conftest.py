@@ -2,8 +2,10 @@
 
 import asyncio
 from collections.abc import AsyncGenerator, Generator
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from CasambiBt import Unit, UnitControl, UnitControlType, UnitState, UnitType
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -177,3 +179,54 @@ def config_entry() -> MockConfigEntry:
         },
         unique_id=TEST_ADDRESS,
     )
+
+
+def make_unit(
+    device_id: int,
+    controls: list[UnitControlType],
+    *,
+    state: UnitState | None = None,
+    on: bool = True,
+    online: bool = True,
+    name: str | None = None,
+) -> Unit:
+    """Create a library unit with the given control types."""
+    unit_type = UnitType(
+        id=device_id,
+        model="Test Model",
+        manufacturer="Test Manufacturer",
+        mode="Test Mode",
+        stateLength=0,
+        controls=[
+            UnitControl(
+                type=control,
+                offset=0,
+                length=8,
+                default=0,
+                readonly=False,
+                min=2700 if control is UnitControlType.TEMPERATURE else None,
+                max=6500 if control is UnitControlType.TEMPERATURE else None,
+            )
+            for control in controls
+        ],
+    )
+    return Unit(
+        _typeId=device_id,
+        deviceId=device_id,
+        uuid=f"unit{device_id:08x}",
+        address=f"00:00:00:00:00:{device_id:02x}",
+        name=name or f"Unit {device_id}",
+        firmwareVersion="1.0",
+        unitType=unit_type,
+        _state=state,
+        _on=on,
+        _online=online,
+    )
+
+
+def make_state(**values: Any) -> UnitState:
+    """Create a library unit state with the given values."""
+    state = UnitState()
+    for key, value in values.items():
+        setattr(state, key, value)
+    return state
