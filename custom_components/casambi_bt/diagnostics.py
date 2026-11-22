@@ -9,11 +9,13 @@ from homeassistant.core import HomeAssistant
 from . import CasambiApi, CasambiConfigEntry
 
 # Credentials and network identifiers (the network id is derived from the
-# mac address) must not leak into diagnostic downloads.
+# mac address) must not leak into diagnostic downloads. discovery_keys hold
+# the bluetooth address of networks that were discovered.
 TO_REDACT = {
     CONF_PASSWORD,
     CONF_ADDRESS,
     "address",
+    "discovery_keys",
     "mac",
     "networkId",
     "network_id",

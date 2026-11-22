@@ -96,6 +96,9 @@
     },
     "rate_limited": {
       "message": "Die Casambi Cloud lehnt neue Anmeldungen für das Netzwerk {address} vorübergehend ab."
+    },
+    "invalid_address": {
+      "message": "Die gespeicherte Bluetooth Adresse {address} ist ungültig. Entferne das Netzwerk und füge es erneut hinzu."
     }
   },
   "entity": {

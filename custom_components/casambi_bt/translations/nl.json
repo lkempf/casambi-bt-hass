@@ -96,6 +96,9 @@
     },
     "rate_limited": {
       "message": "De Casambi cloud weigert tijdelijk nieuwe aanmeldingen voor het netwerk {address}."
+    },
+    "invalid_address": {
+      "message": "Het opgeslagen bluetooth adres {address} is ongeldig. Verwijder het netwerk en voeg het opnieuw toe."
     }
   },
   "entity": {

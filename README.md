@@ -124,17 +124,17 @@ KernelExperimental does not need to be enabled for this.
 
 ## Reporting issues
 
-Before reporting issues make sure that you have the debug log enabled for all relevant components. This can be done by placing the following in `configuration.yaml` of your HA installation:
+1. Download the diagnostics on the integration page (*Download diagnostics* in the menu of the network entry) and attach them. Passwords, addresses and network identifiers are redacted.
+2. Enable the debug log of the integration and reproduce the problem:
 
-```yaml
-logger:
-  default: info
-  logs:
-    CasambiBt: debug
-    custom_components.casambi_bt: debug
-```
+    ```yaml
+    logger:
+      default: info
+      logs:
+        custom_components.casambi_bt: debug
+    ```
 
-The log might contain sensitive information about the network (including your network password and the email address used for the network) so sanitize it first or mail it to the address on my github profile referencing your issue.
+3. Only if asked for it, also enable `CasambiBt: debug` for the library. **Warning:** the library then logs the complete network configuration received from the Casambi cloud, including the keys of your network, and possibly your email address. Never post this log publicly; mail it to the address on my GitHub profile referencing your issue, or remove the `Network:` lines first.
 
 ## Development
 

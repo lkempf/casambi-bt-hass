@@ -100,3 +100,15 @@ def migrate_legacy_cache(cache_root: Path, uuid: str) -> None:
         _LOGGER.info(
             "Upgraded casambi cache %s to version %i.", uuid, TARGET_CACHE_VERSION
         )
+
+
+def restrict_cache_permissions(cache_root: Path, uuid: str) -> None:
+    """Make the cache of a network accessible to the owner only.
+
+    It holds the cloud session and the network keys. casambi-bt creates the
+    cache root with mode 0700 but the per network directory with the
+    default mode. Runs synchronously, call it via an executor job.
+    """
+    for path in (cache_root, cache_root / uuid):
+        with contextlib.suppress(FileNotFoundError):
+            path.chmod(0o700)

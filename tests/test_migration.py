@@ -1,7 +1,9 @@
 """Tests for the legacy cache migration."""
 
 from datetime import UTC, datetime
+from pathlib import Path
 import pickle
+import stat
 
 from CasambiBt._network import _NetworkSession
 import pytest
@@ -13,6 +15,7 @@ from custom_components.casambi_bt.migration import (
     SESSION_CACHE_FILE,
     TYPES_CACHE_FILE,
     migrate_legacy_cache,
+    restrict_cache_permissions,
 )
 
 from .conftest import TEST_UUID
@@ -122,3 +125,20 @@ def test_missing_entry_dir_is_noop(tmp_path) -> None:
     assert not (cache_root / TEST_UUID).exists()
     with pytest.raises(FileNotFoundError):
         (cache_root / CACHE_VERSION_FILE).read_text(encoding="ascii")
+
+
+def test_restrict_cache_permissions(tmp_path: Path) -> None:
+    """The cache with session and keys must only be accessible to the owner."""
+    entry_dir = tmp_path / "aabbccddeeff"
+    entry_dir.mkdir(mode=0o755)
+    tmp_path.chmod(0o755)
+
+    restrict_cache_permissions(tmp_path, "aabbccddeeff")
+
+    assert stat.S_IMODE(entry_dir.stat().st_mode) == 0o700
+    assert stat.S_IMODE(tmp_path.stat().st_mode) == 0o700
+
+
+def test_restrict_cache_permissions_missing(tmp_path: Path) -> None:
+    """A cache that doesn't exist yet must be ignored."""
+    restrict_cache_permissions(tmp_path / "missing", "aabbccddeeff")

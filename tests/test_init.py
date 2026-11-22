@@ -11,6 +11,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.casambi_bt import (
     async_remove_config_entry_device,
     async_remove_entry,
+    cache_uuid,
     is_rate_limited,
     login_status,
 )
@@ -408,3 +409,92 @@ def test_login_status(message: str, status: int | None, limited: bool) -> None:
     err = AuthenticationError(message)
     assert login_status(err) == status
     assert is_rate_limited(err) is limited
+
+
+@pytest.mark.parametrize(
+    ("address", "uuid"),
+    [
+        ("AA:BB:CC:DD:EE:FF", "aabbccddeeff"),
+        ("aa:bb:cc:dd:ee:ff", "aabbccddeeff"),
+        ("../../../etc/x", None),
+        ("AA:BB:CC:DD:EE", None),
+        ("", None),
+    ],
+)
+def test_cache_uuid(address: str, uuid: str | None) -> None:
+    """Only mac addresses may be turned into cache paths."""
+    if uuid is None:
+        with pytest.raises(ValueError):
+            cache_uuid(address)
+    else:
+        assert cache_uuid(address) == uuid
+
+
+async def test_remove_entry_with_invalid_address_keeps_files(
+    hass: HomeAssistant, tmp_path
+) -> None:
+    """A malformed stored address must never lead to deleting a path."""
+    hass.config.config_dir = str(tmp_path)
+    victim = tmp_path / "victim"
+    victim.mkdir()
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_ADDRESS: "../../victim", CONF_PASSWORD: "secret"},
+        version=2,
+    )
+
+    await async_remove_entry(hass, entry)
+
+    assert victim.exists()
+
+
+@pytest.mark.usefixtures("mock_bluetooth", "mock_casambi", "enable_bluetooth")
+async def test_setup_with_invalid_address_fails(hass: HomeAssistant) -> None:
+    """An entry with a malformed address must fail instead of using it."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_ADDRESS: "../../victim", CONF_PASSWORD: "secret"},
+        version=2,
+    )
+    entry.add_to_hass(hass)
+
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.SETUP_ERROR
+
+
+@pytest.mark.usefixtures("mock_bluetooth", "mock_casambi", "enable_bluetooth")
+async def test_failed_cache_migration_does_not_block_setup(
+    hass: HomeAssistant, config_entry: MockConfigEntry
+) -> None:
+    """A cache that can't be migrated must not prevent the setup."""
+    config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.casambi_bt.migrate_legacy_cache",
+        side_effect=PermissionError("read only"),
+    ):
+        await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert config_entry.state is ConfigEntryState.LOADED
+
+
+@pytest.mark.usefixtures("mock_bluetooth", "mock_casambi", "enable_bluetooth")
+async def test_setup_restricts_cache_permissions(
+    hass: HomeAssistant, config_entry: MockConfigEntry
+) -> None:
+    """The setup must restrict the cache and survive if that fails."""
+    config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.casambi_bt.restrict_cache_permissions",
+        side_effect=PermissionError("not allowed"),
+    ) as restrict:
+        await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    restrict.assert_called_once()
+    assert restrict.call_args.args[1] == TEST_UUID
+    assert config_entry.state is ConfigEntryState.LOADED

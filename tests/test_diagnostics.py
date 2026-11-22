@@ -1,5 +1,6 @@
 """Test the diagnostics platform."""
 
+import json
 from unittest.mock import AsyncMock, PropertyMock
 
 from CasambiBt import UnitControlType
@@ -7,11 +8,13 @@ from CasambiBt.errors import CasambiBtError
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.casambi_bt.const import DOMAIN
 from custom_components.casambi_bt.diagnostics import async_get_config_entry_diagnostics
-from homeassistant.config_entries import ConfigEntryState
+from homeassistant.config_entries import ConfigEntryState, DiscoveryKey
+from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 
-from .conftest import MockCasambi, drain, make_state, make_unit
+from .conftest import TEST_ADDRESS, MockCasambi, drain, make_state, make_unit
 
 
 async def test_diagnostics_redacts_secrets(
@@ -93,3 +96,27 @@ async def test_diagnostics_without_network(
         del type(mock_casambi).units
 
     assert result["connection"]["units"] is None
+
+
+async def test_diagnostics_redact_discovery_keys(hass: HomeAssistant) -> None:
+    """The bluetooth address of a discovered network must not leak."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="My Home",
+        data={CONF_ADDRESS: TEST_ADDRESS, CONF_PASSWORD: "secret"},
+        unique_id=TEST_ADDRESS,
+        version=2,
+        discovery_keys={
+            "bluetooth": (
+                DiscoveryKey(domain="bluetooth", key=TEST_ADDRESS, version=1),
+            )
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await async_get_config_entry_diagnostics(hass, entry)
+
+    dump = json.dumps(result, default=str)
+    assert TEST_ADDRESS not in dump
+    assert "secret" not in dump
+    assert "My Home" not in dump

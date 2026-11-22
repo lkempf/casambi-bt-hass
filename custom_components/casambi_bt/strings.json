@@ -96,6 +96,9 @@
     },
     "rate_limited": {
       "message": "The Casambi cloud temporarily refuses new logins for the network {address}."
+    },
+    "invalid_address": {
+      "message": "The stored bluetooth address {address} is invalid. Remove the network and add it again."
     }
   },
   "entity": {
