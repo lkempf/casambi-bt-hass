@@ -12,10 +12,21 @@ All changes on `main` and `dev` must conform to the coding standards used for th
 
 ```bash
 ruff check .
-black . --check
+ruff format --check .
 ```
 
 For `casambi-bt` also run `mypy .`. All of these tools should be available when following the recommended setup procedure.
+
+## Running the tests
+
+Unit tests live in `tests/` and use [pytest-homeassistant-custom-component](https://github.com/MatthewFlamm/pytest-homeassistant-custom-component). To run them locally:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # on Windows: .venv\Scripts\activate
+pip install -r requirements_test.txt
+pytest tests/
+```
 
 ## Development setup
 
