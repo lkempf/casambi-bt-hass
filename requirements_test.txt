@@ -1,4 +1,5 @@
 pytest
+pytest-cov
 pytest-asyncio
 pytest-homeassistant-custom-component
 casambi-bt==0.4.0b5
@@ -11,3 +12,4 @@ dbus-fast
 # Time zone database; required on Windows for hass.config.set_time_zone.
 tzdata
 ruff
+mypy

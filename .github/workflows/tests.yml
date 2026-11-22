@@ -12,4 +12,9 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - name: Run tests
         run: |
-          uv run --no-project --with-requirements requirements_test.txt pytest tests/
+          uv run --python 3.14 --no-project --with-requirements requirements_test.txt \
+            pytest tests/ --cov=custom_components/casambi_bt --cov-report=term-missing --cov-fail-under=95
+      - name: Type check
+        run: |
+          uv run --python 3.14 --no-project --with-requirements requirements_test.txt \
+            mypy custom_components/casambi_bt
