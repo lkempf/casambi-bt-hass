@@ -39,12 +39,16 @@ from .const import (
     RECONNECT_BACKOFF_START,
     RECONNECT_BACKOFF_STEP,
 )
+from .migration import migrate_legacy_cache
 
 _LOGGER: Final = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Casambi Bluetooth from a config entry."""
+    uuid = entry.data[CONF_ADDRESS].replace(":", "").lower()
+    await hass.async_add_executor_job(migrate_legacy_cache, get_cache_dir(hass), uuid)
+
     api = CasambiApi(hass, entry, entry.data[CONF_ADDRESS], entry.data[CONF_PASSWORD])
     await api.connect()
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = api

@@ -23,6 +23,7 @@ from homeassistant.helpers.httpx_client import get_async_client
 
 from . import get_cache_dir
 from .const import CONF_IMPORT_GROUPS, DOMAIN
+from .migration import migrate_legacy_cache
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -55,8 +56,24 @@ async def _validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str
     if not bt_device:
         raise NetworkNotFoundError
 
-    await casa.invalidateCache(bt_device.address)
-    await casa.connect(bt_device, data[CONF_PASSWORD])
+    # The library keys its cache directory by the mac without colons in
+    # lower case.
+    uuid = bt_device.address.replace(":", "").lower()
+    await hass.async_add_executor_job(migrate_legacy_cache, get_cache_dir(hass), uuid)
+
+    try:
+        # Connect with the existing cache first. A valid cached session
+        # skips the cloud login, which keeps the flow working even while
+        # the cloud refuses new sessions.
+        await casa.connect(bt_device, data[CONF_PASSWORD])
+    except AuthenticationError as err:
+        # The cached session is missing, expired or rejected. Drop the
+        # cache and retry with a genuine cloud login so a wrong password
+        # is still reported to the user.
+        _LOGGER.warning("Login with cached session failed, retrying fresh: %s", err)
+        await casa.invalidateCache(uuid)
+        casa = Casambi(client, get_cache_dir(hass))
+        await casa.connect(bt_device, data[CONF_PASSWORD])
 
     network_name = casa.networkName
 
@@ -147,7 +164,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     info = await _validate_input(self.hass, user_input)
                 except NetworkNotFoundError:
                     errors["base"] = "cannot_connect"
-                except AuthenticationError:
+                except AuthenticationError as err:
+                    # The error carries the http status code and the cloud
+                    # response which tells apart a wrong password (401) from
+                    # a rate limit (403) or other issues.
+                    _LOGGER.warning("Casambi login failed: %s", err)
                     errors["base"] = "invalid_auth"
                 except Exception:  # pylint: disable=broad-except
                     _LOGGER.exception("Unexpected exception")
@@ -196,7 +217,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await _validate_input(self.hass, data)
             except NetworkNotFoundError:
                 errors["base"] = "cannot_connect"
-            except AuthenticationError:
+            except AuthenticationError as err:
+                _LOGGER.warning("Casambi login failed: %s", err)
                 errors["base"] = "invalid_auth"
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Unexpected exception")

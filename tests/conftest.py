@@ -110,6 +110,7 @@ class MockCasambi:
         self.connect = AsyncMock(side_effect=self._connect)
         self.disconnect = AsyncMock(side_effect=self._disconnect)
         self.reconnect = AsyncMock(side_effect=self._reconnect)
+        self.invalidateCache = AsyncMock()
 
     async def _connect(self, _device, _password, _forceOffline=False) -> None:
         self.connected = True
@@ -130,7 +131,13 @@ def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
 def mock_casambi() -> Generator[MockCasambi]:
     """Patch the Casambi class used by the integration."""
     instance = MockCasambi()
-    with patch("custom_components.casambi_bt.Casambi", return_value=instance):
+    with (
+        patch("custom_components.casambi_bt.Casambi", return_value=instance),
+        patch(
+            "custom_components.casambi_bt.config_flow.Casambi",
+            return_value=instance,
+        ),
+    ):
         yield instance
 
 
@@ -138,9 +145,14 @@ def mock_casambi() -> Generator[MockCasambi]:
 def mock_bluetooth() -> Generator[MagicMock]:
     """Patch the bluetooth helpers used to find and watch the device."""
     device = MagicMock()
+    device.address = TEST_ADDRESS
     with (
         patch(
             "homeassistant.components.bluetooth.async_ble_device_from_address",
+            return_value=device,
+        ),
+        patch(
+            "custom_components.casambi_bt.config_flow.async_ble_device_from_address",
             return_value=device,
         ),
         patch(
