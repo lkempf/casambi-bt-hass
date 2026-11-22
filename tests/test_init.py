@@ -11,6 +11,8 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.casambi_bt import (
     async_remove_config_entry_device,
     async_remove_entry,
+    is_rate_limited,
+    login_status,
 )
 from custom_components.casambi_bt.const import CONF_IMPORT_GROUPS, DOMAIN
 from homeassistant.config_entries import ConfigEntryState
@@ -371,3 +373,38 @@ async def test_remove_config_entry_device(
     # The unit is removed in the app while Home Assistant is running.
     mock_casambi.units = []
     assert await async_remove_config_entry_device(hass, config_entry, live)
+
+
+@pytest.mark.usefixtures("mock_bluetooth", "enable_bluetooth")
+async def test_setup_rate_limited_retries(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+) -> None:
+    """A cloud rate limit must retry the setup instead of starting reauth."""
+    mock_casambi.connect = AsyncMock(
+        side_effect=AuthenticationError("Login failed: 403\nToo many sessions")
+    )
+    config_entry.add_to_hass(hass)
+
+    await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert config_entry.state is ConfigEntryState.SETUP_RETRY
+    assert not hass.config_entries.flow.async_progress()
+
+
+@pytest.mark.parametrize(
+    ("message", "status", "limited"),
+    [
+        ("Login failed: 401\nwrong", 401, False),
+        ("Login failed: 403\nlater", 403, True),
+        ("Login failed: 429", 429, True),
+        ("Not authenticated!", None, False),
+    ],
+)
+def test_login_status(message: str, status: int | None, limited: bool) -> None:
+    """The login status is parsed from the library error message."""
+    err = AuthenticationError(message)
+    assert login_status(err) == status
+    assert is_rate_limited(err) is limited

@@ -7,6 +7,7 @@ import inspect
 import logging
 from pathlib import Path
 import random
+import re
 import shutil
 from typing import Any, Final, cast
 
@@ -44,6 +45,12 @@ from .const import (
 from .migration import migrate_legacy_cache
 
 _LOGGER: Final = logging.getLogger(__name__)
+
+# casambi-bt reports the http status of a failed cloud login only in the
+# message of the AuthenticationError ("Login failed: <status>\n<body>").
+_LOGIN_STATUS_REGEX: Final = re.compile(r"Login failed: (\d{3})")
+# The Casambi cloud answers 403 when it refuses new sessions for a while.
+_RATE_LIMIT_STATUSES: Final = frozenset({403, 429})
 
 type CasambiConfigEntry = ConfigEntry[CasambiApi]
 
@@ -166,6 +173,18 @@ async def async_remove_config_entry_device(
     return not device_entry.identifiers & _live_identifiers(config_entry.runtime_data)
 
 
+def login_status(err: AuthenticationError) -> int | None:
+    """Return the http status of a failed cloud login, if known."""
+    if match := _LOGIN_STATUS_REGEX.match(str(err)):
+        return int(match.group(1))
+    return None
+
+
+def is_rate_limited(err: AuthenticationError) -> bool:
+    """Return True if the cloud refused the login temporarily."""
+    return login_status(err) in _RATE_LIMIT_STATUSES
+
+
 def get_cache_dir(hass: HomeAssistant) -> Path:
     """Return the cache dir that should be used by CasambiBt."""
     conf_path = Path(hass.config.config_dir)
@@ -198,6 +217,10 @@ class CasambiApi:
         self._link_up = False
         self._cancel_bluetooth_callback: Callable[[], None] | None = None
         self._reconnect_task: asyncio.Task[None] | None = None
+        # Set when the network rejected the credentials. No reconnect is
+        # attempted until the entry is reloaded (e.g. by a successful
+        # reauth), otherwise every advertisement would trigger a login.
+        self._auth_failed = False
 
     def _register_bluetooth_callback(self) -> None:
         self._cancel_bluetooth_callback = bluetooth.async_register_callback(
@@ -264,6 +287,14 @@ class CasambiApi:
                 translation_placeholders={"address": self.address},
             ) from err
         except AuthenticationError as err:
+            if is_rate_limited(err):
+                # A rate limit says nothing about the password, so retry
+                # later instead of asking the user to re-authenticate.
+                raise ConfigEntryNotReady(
+                    translation_domain=DOMAIN,
+                    translation_key="rate_limited",
+                    translation_placeholders={"address": self.address},
+                ) from err
             raise ConfigEntryAuthFailed(
                 translation_domain=DOMAIN,
                 translation_key="auth_failed",
@@ -327,15 +358,20 @@ class CasambiApi:
                 # Sometimes HA notifications seem not to work.
                 # We are still registered for HA notifications but retrying very seldomly should be fine.
                 backoff = max(backoff, 60)
-            except AuthenticationError:
-                # Retrying cannot fix wrong credentials. Hand over to the
-                # reauth flow which reloads the entry once it succeeds.
-                _LOGGER.warning(
-                    "Authentication to Casambi network %s failed while reconnecting",
-                    self.address,
-                )
-                self.conf_entry.async_start_reauth(self.hass)
-                break
+            except AuthenticationError as err:
+                if not is_rate_limited(err):
+                    # Retrying cannot fix wrong credentials. Hand over to the
+                    # reauth flow which reloads the entry once it succeeds.
+                    _LOGGER.warning(
+                        "Authentication to Casambi network %s failed while "
+                        "reconnecting",
+                        self.address,
+                    )
+                    self._auth_failed = True
+                    self.conf_entry.async_start_reauth(self.hass)
+                    break
+                _LOGGER.debug("Login rate limited, retrying later.")
+                backoff = RECONNECT_BACKOFF_MAX
             except Exception as err:  # pylint: disable=broad-except
                 # Never let the reconnect loop die: a dead loop leaves the
                 # integration unavailable until the user reloads it. Retry
@@ -528,6 +564,8 @@ class CasambiApi:
             self._schedule_reconnect()
 
     def _schedule_reconnect(self) -> None:
+        if self._auth_failed:
+            return
         # We assume that a reconnect task is only cancelled when disconnected.
         # So never reconnect when the disconnect task has been cancelled.
         if self._reconnect_task is not None and self._reconnect_task.cancelled():

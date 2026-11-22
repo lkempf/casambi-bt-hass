@@ -2,7 +2,11 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from CasambiBt.errors import AuthenticationError, BluetoothError
+from CasambiBt.errors import (
+    AuthenticationError,
+    BluetoothError,
+    NetworkOnlineUpdateNeededError,
+)
 from habluetooth import BluetoothServiceInfoBleak
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -128,6 +132,7 @@ async def test_user_flow_invalid_address(hass: HomeAssistant) -> None:
     ("error", "expected"),
     [
         (AuthenticationError("Login failed: 401"), "invalid_auth"),
+        (AuthenticationError("Login failed: 403\nlater"), "rate_limited"),
         (BluetoothError(), "cannot_connect"),
         (RuntimeError("boom"), "unknown"),
     ],
@@ -298,11 +303,9 @@ async def test_reauth_flow(
     assert result["step_id"] == "reauth_confirm"
     assert result["description_placeholders"] == {"name": "Test Network"}
 
-    # A wrong password keeps the entry running: both login attempts of the
-    # validation fail, then the entry is set up again with its old data.
-    mock_casambi.connect = AsyncMock(
-        side_effect=[AuthenticationError(), AuthenticationError(), None]
-    )
+    # A wrong password keeps the entry running: the forced cloud login of
+    # the validation fails, then the entry is set up again with its old data.
+    mock_casambi.connect = AsyncMock(side_effect=[AuthenticationError(), None])
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_PASSWORD: "wrong"}
     )
@@ -383,4 +386,29 @@ async def test_reconfigure_flow(
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
     assert config_entry.data[CONF_PASSWORD] == "new-password"
+    assert config_entry.state is ConfigEntryState.LOADED
+
+
+@pytest.mark.usefixtures("mock_bluetooth")
+async def test_reauth_cloud_unreachable(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+) -> None:
+    """Without the cloud a new password can't be verified."""
+    config_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    result = await config_entry.start_reauth_flow(hass)
+    mock_casambi.connect = AsyncMock(
+        side_effect=[NetworkOnlineUpdateNeededError(), None]
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_PASSWORD: "new-password"}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "cloud_unreachable"}
+    assert config_entry.data[CONF_PASSWORD] == "secret-password"
     assert config_entry.state is ConfigEntryState.LOADED

@@ -1,12 +1,22 @@
 """Config flow for Casambi Bluetooth integration."""
 
 from collections.abc import Mapping
+from functools import partial
 import logging
+from pathlib import Path
 import re
+import shutil
+import tempfile
 from typing import Any, Final
 
+from bleak.backends.device import BLEDevice
 from CasambiBt import Casambi
-from CasambiBt.errors import AuthenticationError, CasambiBtError, NetworkNotFoundError
+from CasambiBt.errors import (
+    AuthenticationError,
+    CasambiBtError,
+    NetworkNotFoundError,
+    NetworkOnlineUpdateNeededError,
+)
 import voluptuous as vol
 
 from homeassistant.components.bluetooth import (
@@ -32,7 +42,7 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
-from . import CasambiConfigEntry, get_cache_dir
+from . import CasambiConfigEntry, get_cache_dir, is_rate_limited, login_status
 from .const import CONF_IMPORT_GROUPS, DOMAIN
 from .migration import migrate_legacy_cache
 
@@ -71,44 +81,80 @@ def normalize_address(address: str) -> str:
     return format_mac(address.strip()).upper()
 
 
-async def _validate_input(hass: HomeAssistant, address: str, password: str) -> str:
+async def _async_connect_once(casa: Casambi, device: BLEDevice, password: str) -> str:
+    """Connect, read the network name and always disconnect again.
+
+    The entry can't connect while the validation holds the connection, and
+    bluetooth proxies only offer a few connection slots, so the connection
+    is closed even if the flow is cancelled meanwhile.
+    """
+    try:
+        await casa.connect(device, password)
+        return casa.networkName
+    finally:
+        try:
+            await casa.disconnect()
+        except Exception:  # pylint: disable=broad-except
+            _LOGGER.debug("Disconnecting after the validation failed", exc_info=True)
+
+
+async def _validate_input(
+    hass: HomeAssistant, address: str, password: str, *, verify_password: bool = False
+) -> str:
     """Connect to the network once and return its name.
+
+    With verify_password the login happens in an empty, temporary cache, so
+    the cloud has to check the password: casambi-bt skips the login while a
+    cached session is valid and falls back to the cache when the cloud is
+    unreachable. The cache of the entry is left untouched.
 
     Raises the library errors if the network can't be reached or the
     password is rejected.
     """
     client = get_async_client(hass)
-    casa = Casambi(client, get_cache_dir(hass))
     bt_device = async_ble_device_from_address(hass, address, connectable=True)
 
     if not bt_device:
         raise NetworkNotFoundError
+
+    if verify_password:
+        temp_dir = Path(await hass.async_add_executor_job(tempfile.mkdtemp))
+        try:
+            # A missing cache directory is created by the library with
+            # restrictive permissions and a valid version file.
+            return await _async_connect_once(
+                Casambi(client, temp_dir / "cache"), bt_device, password
+            )
+        finally:
+            await hass.async_add_executor_job(
+                partial(shutil.rmtree, temp_dir, ignore_errors=True)
+            )
 
     # The library keys its cache directory by the mac without colons in
     # lower case.
     uuid = bt_device.address.replace(":", "").lower()
     await hass.async_add_executor_job(migrate_legacy_cache, get_cache_dir(hass), uuid)
 
+    casa = Casambi(client, get_cache_dir(hass))
     try:
         # Connect with the existing cache first. A valid cached session
-        # skips the cloud login, which keeps the flow working even while
-        # the cloud refuses new sessions.
-        await casa.connect(bt_device, password)
+        # skips the cloud login, which keeps adding a network working even
+        # while the cloud refuses new sessions.
+        return await _async_connect_once(casa, bt_device, password)
     except AuthenticationError as err:
+        if is_rate_limited(err):
+            raise
         # The cached session is missing, expired or rejected. Drop the
         # cache and retry with a genuine cloud login so a wrong password
         # is still reported to the user.
-        _LOGGER.warning("Login with cached session failed, retrying fresh: %s", err)
+        _LOGGER.info(
+            "Login with cached session failed (status %s), retrying fresh",
+            login_status(err),
+        )
         await casa.invalidateCache(uuid)
-        casa = Casambi(client, get_cache_dir(hass))
-        await casa.connect(bt_device, password)
-
-    network_name = casa.networkName
-
-    # Disconnect again, otherwise setting up the entry can't connect.
-    await casa.disconnect()
-
-    return network_name
+        return await _async_connect_once(
+            Casambi(client, get_cache_dir(hass)), bt_device, password
+        )
 
 
 class CasambiConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -138,18 +184,22 @@ class CasambiConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
     async def _async_try_connect(
-        self, address: str, password: str
+        self, address: str, password: str, *, verify_password: bool = False
     ) -> tuple[str | None, dict[str, str]]:
         """Validate the credentials and map failures to form errors."""
         errors: dict[str, str] = {}
         try:
-            title = await _validate_input(self.hass, address, password)
+            title = await _validate_input(
+                self.hass, address, password, verify_password=verify_password
+            )
         except AuthenticationError as err:
-            # The error carries the http status code and the cloud
-            # response which tells apart a wrong password (401) from
-            # a rate limit (403) or other issues.
-            _LOGGER.warning("Casambi login failed: %s", err)
-            errors["base"] = "invalid_auth"
+            # Only log the status: the error also carries the response body
+            # of the cloud.
+            _LOGGER.warning("Casambi login failed with status %s", login_status(err))
+            errors["base"] = "rate_limited" if is_rate_limited(err) else "invalid_auth"
+        except NetworkOnlineUpdateNeededError:
+            _LOGGER.debug("Casambi cloud not reachable", exc_info=True)
+            errors["base"] = "cloud_unreachable"
         except CasambiBtError:
             _LOGGER.debug("Connecting to %s failed", address, exc_info=True)
             errors["base"] = "cannot_connect"
@@ -173,7 +223,11 @@ class CasambiConfigFlow(ConfigFlow, domain=DOMAIN):
         if was_loaded:
             await self.hass.config_entries.async_unload(entry.entry_id)
 
-        _, errors = await self._async_try_connect(entry.data[CONF_ADDRESS], password)
+        # A new password must be checked by the cloud, a cached session
+        # would accept any password.
+        _, errors = await self._async_try_connect(
+            entry.data[CONF_ADDRESS], password, verify_password=True
+        )
 
         if errors and was_loaded:
             await self.hass.config_entries.async_setup(entry.entry_id)

@@ -164,6 +164,14 @@ async def test_reconnect_auth_error_starts_reauth(
     assert flows[0]["context"]["source"] == "reauth"
     assert not api.available
 
+    # Advertisements and failed writes must not trigger further logins
+    # with the rejected credentials until the entry is reloaded.
+    for _ in range(3):
+        api._bluetooth_callback(MagicMock(connectable=True), MagicMock())  # noqa: SLF001
+        api._schedule_reconnect()  # noqa: SLF001
+        await drain(hass, rounds=3)
+    mock_casambi.reconnect.assert_awaited_once()
+
 
 @pytest.mark.parametrize(
     "errors",
@@ -319,3 +327,37 @@ async def test_no_reconnect_after_disconnect(
     api._schedule_reconnect()  # noqa: SLF001
     await drain(hass, rounds=5)
     assert mock_casambi.reconnect.await_count == 1
+
+
+@pytest.mark.usefixtures("mock_bluetooth", "enable_bluetooth")
+async def test_reconnect_rate_limited_keeps_retrying(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+) -> None:
+    """A rate limit while reconnecting must back off, not start reauth."""
+    api = await _setup(hass, config_entry)
+
+    attempts = []
+    sleeps: list[float] = []
+
+    async def _reconnect(_device):
+        attempts.append(_device)
+        if len(attempts) == 1:
+            raise AuthenticationError("Login failed: 403")
+        mock_casambi.connected = True
+
+    async def _sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    mock_casambi.connected = False
+    mock_casambi.reconnect = AsyncMock(side_effect=_reconnect)
+
+    with patch("custom_components.casambi_bt.asyncio.sleep", new=_sleep):
+        api._schedule_reconnect()  # noqa: SLF001
+        await drain(hass)
+
+    assert len(attempts) == 2
+    assert api.available
+    assert not hass.config_entries.flow.async_progress()
+    assert max(sleeps) >= RECONNECT_BACKOFF_MAX

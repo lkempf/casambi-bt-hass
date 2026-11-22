@@ -53,7 +53,9 @@
       "cannot_connect": "Failed to connect",
       "invalid_address": "The bluetooth MAC address of the network is invalid.",
       "invalid_auth": "Invalid authentication",
-      "unknown": "Unexpected error"
+      "unknown": "Unexpected error",
+      "rate_limited": "The Casambi cloud temporarily refuses new logins. Wait a few minutes and try again.",
+      "cloud_unreachable": "The Casambi cloud is not reachable, so the password can't be verified. Check the internet connection and try again."
     },
     "abort": {
       "already_configured": "Device is already configured",
@@ -91,6 +93,9 @@
     },
     "write_failed": {
       "message": "Sending the command to the Casambi network failed."
+    },
+    "rate_limited": {
+      "message": "The Casambi cloud temporarily refuses new logins for the network {address}."
     }
   },
   "entity": {
