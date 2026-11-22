@@ -363,3 +363,200 @@ async def test_turn_on_group_with_rgb_color(
     group = mock_casambi.groups[0]
     mock_casambi.setColor.assert_awaited_once_with(group, (9, 8, 7))
     mock_casambi.setLevel.assert_awaited_once_with(group, 9)
+
+
+@pytest.mark.parametrize(
+    ("controls", "expected"),
+    [
+        # Dimmers and color lights: brightness is implied by the color mode.
+        (
+            [[UnitControlType.DIMMER], [UnitControlType.DIMMER, UnitControlType.RGB]],
+            [ColorMode.RGB],
+        ),
+        # Switches and dimmers.
+        ([[UnitControlType.ONOFF], [UnitControlType.DIMMER]], [ColorMode.BRIGHTNESS]),
+        # Tunable white and color lights.
+        (
+            [
+                [UnitControlType.DIMMER, UnitControlType.TEMPERATURE],
+                [UnitControlType.DIMMER, UnitControlType.XY],
+            ],
+            [ColorMode.COLOR_TEMP, ColorMode.XY],
+        ),
+    ],
+)
+async def test_mixed_groups_are_added(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    group_config_entry: MockConfigEntry,
+    controls: list[list[UnitControlType]],
+    expected: list[ColorMode],
+) -> None:
+    """Groups of different lights must be added with valid color modes.
+
+    Home Assistant refuses entities with e.g. BRIGHTNESS and RGB, which
+    used to drop such groups entirely.
+    """
+    units = [
+        make_unit(i, unit_controls, state=make_state(dimmer=10))
+        for i, unit_controls in enumerate(controls, start=1)
+    ]
+    mock_casambi.units = units
+    mock_casambi.groups = [Group(groudId=7, name="Mixed", units=units)]
+
+    await _setup(hass, group_config_entry)
+
+    entity_id = _entity_id(hass, f"{mock_casambi.networkId}-group-7")
+    state = hass.states.get(entity_id)
+    assert sorted(state.attributes["supported_color_modes"]) == sorted(expected)
+
+
+async def test_group_without_lights_is_skipped(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    group_config_entry: MockConfigEntry,
+) -> None:
+    """A group of units without light controls must not become a light."""
+    sensor = make_unit(1, [UnitControlType.LUX])
+    mock_casambi.units = [sensor]
+    mock_casambi.groups = [Group(groudId=7, name="Sensors", units=[sensor])]
+
+    await _setup(hass, group_config_entry)
+
+    assert hass.states.async_entity_ids("light") == []
+
+
+async def test_white_only_unit_is_on_off_light(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+) -> None:
+    """A unit with only a white channel must be added as on/off light."""
+    unit = make_unit(1, [UnitControlType.WHITE])
+    mock_casambi.units = [unit]
+
+    await _setup(hass, config_entry)
+
+    entity_id = _entity_id(hass, f"{mock_casambi.networkId}-unit-{unit.uuid}-light")
+    assert hass.states.get(entity_id).attributes["supported_color_modes"] == [
+        ColorMode.ONOFF
+    ]
+
+
+async def test_xy_only_unit_is_light(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+) -> None:
+    """A unit with only a xy color control must be added as light."""
+    unit = make_unit(1, [UnitControlType.XY])
+    mock_casambi.units = [unit]
+
+    await _setup(hass, config_entry)
+
+    entity_id = _entity_id(hass, f"{mock_casambi.networkId}-unit-{unit.uuid}-light")
+    assert hass.states.get(entity_id).attributes["supported_color_modes"] == [
+        ColorMode.XY
+    ]
+
+
+async def test_turn_on_off_unit_with_color_only(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+) -> None:
+    """Setting only a color on an off unit must turn it on."""
+    state = make_state(dimmer=0, rgb=(0, 0, 0), onoff=False)
+    unit = make_unit(
+        1,
+        [UnitControlType.ONOFF, UnitControlType.DIMMER, UnitControlType.RGB],
+        state=state,
+        on=False,
+    )
+    mock_casambi.units = [unit]
+    calls: list[str] = []
+    mock_casambi.setUnitState = AsyncMock(
+        side_effect=lambda *_: calls.append("setUnitState")
+    )
+    mock_casambi.turnOn = AsyncMock(side_effect=lambda *_: calls.append("turnOn"))
+
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass, f"{mock_casambi.networkId}-unit-{unit.uuid}-light")
+    assert hass.states.get(entity_id).state == "off"
+
+    await hass.services.async_call(
+        "light",
+        "turn_on",
+        {"entity_id": entity_id, "rgb_color": (255, 0, 0)},
+        blocking=True,
+    )
+
+    sent = mock_casambi.setUnitState.await_args.args[1]
+    assert sent.rgb == (255, 0, 0)
+    assert sent.onoff is True
+    # The level of the off unit is unknown, so the last level is restored
+    # after the color is set.
+    assert calls == ["setUnitState", "turnOn"]
+
+
+async def test_turn_on_on_unit_with_color_keeps_level(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+) -> None:
+    """Changing the color of an on unit must not touch its level."""
+    unit = make_unit(
+        1,
+        [UnitControlType.DIMMER, UnitControlType.RGB],
+        state=make_state(dimmer=80, rgb=(0, 0, 0)),
+    )
+    mock_casambi.units = [unit]
+    mock_casambi.setUnitState = AsyncMock()
+    mock_casambi.turnOn = AsyncMock()
+
+    await _setup(hass, config_entry)
+    entity_id = _entity_id(hass, f"{mock_casambi.networkId}-unit-{unit.uuid}-light")
+
+    await hass.services.async_call(
+        "light",
+        "turn_on",
+        {"entity_id": entity_id, "rgb_color": (0, 255, 0)},
+        blocking=True,
+    )
+
+    assert mock_casambi.setUnitState.await_args.args[1].dimmer == 80
+    mock_casambi.turnOn.assert_not_awaited()
+
+
+async def test_turn_on_off_group_with_color_only(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    group_config_entry: MockConfigEntry,
+) -> None:
+    """Setting only a color on an off group must turn it on, not off."""
+    unit = make_unit(
+        1,
+        [UnitControlType.DIMMER, UnitControlType.RGB],
+        state=make_state(dimmer=0, rgb=(0, 0, 0)),
+        on=False,
+    )
+    mock_casambi.units = [unit]
+    mock_casambi.groups = [Group(groudId=7, name="Living", units=[unit])]
+    mock_casambi.setColor = AsyncMock()
+    mock_casambi.setLevel = AsyncMock()
+    mock_casambi.turnOn = AsyncMock()
+
+    await _setup(hass, group_config_entry)
+    entity_id = _entity_id(hass, f"{mock_casambi.networkId}-group-7")
+
+    await hass.services.async_call(
+        "light",
+        "turn_on",
+        {"entity_id": entity_id, "rgb_color": (1, 2, 3)},
+        blocking=True,
+    )
+
+    group = mock_casambi.groups[0]
+    mock_casambi.setColor.assert_awaited_once_with(group, (1, 2, 3))
+    mock_casambi.setLevel.assert_not_awaited()
+    mock_casambi.turnOn.assert_awaited_once_with(group)

@@ -114,6 +114,21 @@ class MockCasambi:
         self.reconnect = AsyncMock(side_effect=self._reconnect)
         self.invalidateCache = AsyncMock()
 
+        # Commands of the library, all of them coroutines.
+        for command in (
+            "setUnitState",
+            "setLevel",
+            "setColor",
+            "setColorXY",
+            "setWhite",
+            "setTemperature",
+            "setVertical",
+            "turnOn",
+            "turnOff",
+            "switchToScene",
+        ):
+            setattr(self, command, AsyncMock())
+
     async def _connect(self, _device, _password, _forceOffline=False) -> None:
         self.connected = True
 

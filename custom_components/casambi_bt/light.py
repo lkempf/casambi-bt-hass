@@ -16,6 +16,7 @@ from homeassistant.components.light import (
     ColorMode,
     LightEntity,
     LightEntityFeature,
+    filter_supported_color_modes,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -35,9 +36,45 @@ CASA_LIGHT_CTRL_TYPES: Final[list[UnitControlType]] = [
     UnitControlType.WHITE,
     UnitControlType.ONOFF,
     UnitControlType.TEMPERATURE,
+    UnitControlType.XY,
 ]
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def is_light_unit(unit: Unit) -> bool:
+    """Return True if the unit has a control of a light."""
+    return any(
+        control.type in CASA_LIGHT_CTRL_TYPES for control in unit.unitType.controls
+    )
+
+
+def unit_color_modes(unit: Unit) -> set[ColorMode]:
+    """Return the color modes a unit supports.
+
+    Every unit can be switched on and off, so ONOFF is the fallback for
+    units without a dimmer or color control (e.g. a white channel only).
+    """
+    supported: set[ColorMode] = set()
+    unit_modes = [uc.type for uc in unit.unitType.controls]
+
+    if UnitControlType.RGB in unit_modes and UnitControlType.WHITE in unit_modes:
+        supported.add(ColorMode.RGBW)
+    elif UnitControlType.RGB in unit_modes:
+        supported.add(ColorMode.RGB)
+    if UnitControlType.TEMPERATURE in unit_modes:
+        supported.add(ColorMode.COLOR_TEMP)
+    if UnitControlType.XY in unit_modes:
+        supported.add(ColorMode.XY)
+
+    if not supported:
+        if UnitControlType.DIMMER in unit_modes:
+            supported.add(ColorMode.BRIGHTNESS)
+        else:
+            supported.add(ColorMode.ONOFF)
+
+    return supported
+
 
 # Commands share one bluetooth connection which the library already
 # serializes, so don't add another limit on top.
@@ -58,7 +95,11 @@ async def async_setup_entry(
 
     group_entities: list[CasambiLight] = []
     if config_entry.options.get(CONF_IMPORT_GROUPS, True):
-        group_entities = [CasambiLightGroup(casa_api, g) for g in casa_api.get_groups()]
+        group_entities = [
+            CasambiLightGroup(casa_api, g)
+            for g in casa_api.get_groups()
+            if any(is_light_unit(u) for u in g.units)
+        ]
 
     async_add_entities(light_entities + group_entities)
 
@@ -82,29 +123,6 @@ class CasambiLight(CasambiEntity, LightEntity, metaclass=ABCMeta):
         self._obj: Group | Unit
         super().__init__(api, description, obj)
 
-    def _capabilities_helper(self, unit: Unit) -> set[ColorMode]:
-        supported: set[ColorMode] = set()
-        unit_modes = [uc.type for uc in unit.unitType.controls]
-
-        if UnitControlType.RGB in unit_modes and UnitControlType.WHITE in unit_modes:
-            supported.add(ColorMode.RGBW)
-        elif UnitControlType.RGB in unit_modes:
-            supported.add(ColorMode.RGB)
-        if UnitControlType.TEMPERATURE in unit_modes:
-            supported.add(ColorMode.COLOR_TEMP)
-        if UnitControlType.XY in unit_modes:
-            supported.add(ColorMode.XY)
-
-        if len(supported) == 0:
-            if UnitControlType.DIMMER in unit_modes:
-                supported.add(ColorMode.BRIGHTNESS)
-            elif UnitControlType.ONOFF in unit_modes:
-                supported.add(ColorMode.ONOFF)
-            else:
-                supported.add(ColorMode.UNKNOWN)
-
-        return supported
-
     def _mode_helper(self, modes: set[ColorMode] | set[str] | None) -> ColorMode:
         if modes:
             if ColorMode.RGBW in modes:
@@ -117,9 +135,7 @@ class CasambiLight(CasambiEntity, LightEntity, metaclass=ABCMeta):
                 return ColorMode.COLOR_TEMP
             if ColorMode.BRIGHTNESS in modes:
                 return ColorMode.BRIGHTNESS
-            if ColorMode.ONOFF in modes:
-                return ColorMode.ONOFF
-        return ColorMode.UNKNOWN
+        return ColorMode.ONOFF
 
     def _color_mode_for(self, state: UnitState | None) -> ColorMode:
         """Return the color mode matching the active color source of a state.
@@ -151,7 +167,9 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
 
     def __init__(self, api: CasambiApi, unit: Unit) -> None:
         """Initialize a Casambi light entity."""
-        self._attr_supported_color_modes = self._capabilities_helper(unit)
+        self._attr_supported_color_modes = filter_supported_color_modes(
+            unit_color_modes(unit)
+        )
 
         temp_control = unit.unitType.get_control(UnitControlType.TEMPERATURE)
         if temp_control is not None:
@@ -248,10 +266,23 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
             state.colorsource = ColorSource.XY
             set_state = True
 
-        if set_state:
-            await self._api.casa.setUnitState(unit, state)
-        else:
-            await self._api.casa.turnOn(self._obj)
+        if not set_state:
+            await self._api.casa.turnOn(unit)
+            return
+
+        # The state is sent as a whole, so it must say "on". The copy of an
+        # off unit carries onoff=False and a level of 0, which would keep the
+        # unit off although only the color was meant to change.
+        if unit.unitType.get_control(UnitControlType.ONOFF) is not None:
+            state.onoff = True
+        await self._api.casa.setUnitState(unit, state)
+        if (
+            ATTR_BRIGHTNESS not in kwargs
+            and not state.dimmer
+            and unit.unitType.get_control(UnitControlType.DIMMER) is not None
+        ):
+            # No level known: restore the last level like a plain turn on.
+            await self._api.casa.turnOn(unit)
 
 
 class CasambiLightGroup(CasambiLight, CasambiNetworkGroup):
@@ -260,14 +291,15 @@ class CasambiLightGroup(CasambiLight, CasambiNetworkGroup):
     def __init__(self, api: CasambiApi, group: Group) -> None:
         """Initialize a Casambi group entity."""
 
-        # Find union of supported color modes.
+        # The union of the units' modes can be an invalid combination such as
+        # BRIGHTNESS and RGB for a group of dimmers and color lights, which
+        # Home Assistant refuses. Reduce it to a valid set; ONOFF and
+        # BRIGHTNESS are implied by the color modes.
         supported_modes: set[ColorMode] = set()
         for unit in group.units:
-            supported_modes = supported_modes.union(self._capabilities_helper(unit))
-
-        if len(supported_modes) == 0:
-            supported_modes.add(ColorMode.UNKNOWN)
-        self._attr_supported_color_modes = supported_modes
+            if is_light_unit(unit):
+                supported_modes |= unit_color_modes(unit)
+        self._attr_supported_color_modes = filter_supported_color_modes(supported_modes)
 
         desc = TypedEntityDescription(
             key=str(group.groudId), name=group.name, entity_type="light"
@@ -369,7 +401,10 @@ class CasambiLightGroup(CasambiLight, CasambiNetworkGroup):
         if not was_set:
             await self._api.casa.turnOn(self._obj)
         elif ATTR_BRIGHTNESS not in kwargs:
-            # Sync brightness for group so that everything turns on.
-            # This might be a bit confusing because the rest isn't synced.
-            if self.brightness is not None:
-                await self._api.casa.setLevel(self._obj, self.brightness)
+            if level := self.brightness:
+                # Sync the level of the group so that all units turn on.
+                await self._api.casa.setLevel(self._obj, level)
+            else:
+                # The group is off: setting the color alone keeps it off and
+                # syncing a level of 0 would turn it off again.
+                await self._api.casa.turnOn(self._obj)
