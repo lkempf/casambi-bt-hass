@@ -44,15 +44,17 @@ from .migration import migrate_legacy_cache
 
 _LOGGER: Final = logging.getLogger(__name__)
 
+type CasambiConfigEntry = ConfigEntry[CasambiApi]
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+
+async def async_setup_entry(hass: HomeAssistant, entry: CasambiConfigEntry) -> bool:
     """Set up Casambi Bluetooth from a config entry."""
     uuid = entry.data[CONF_ADDRESS].replace(":", "").lower()
     await hass.async_add_executor_job(migrate_legacy_cache, get_cache_dir(hass), uuid)
 
     api = CasambiApi(hass, entry, entry.data[CONF_ADDRESS], entry.data[CONF_PASSWORD])
     await api.connect()
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = api
+    entry.runtime_data = api
 
     # Register the network (hub) device up front. Unit devices reference it
     # through via_device_id, which must resolve no matter in which order the
@@ -71,27 +73,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except Exception:
         # Clean up the connection and callbacks if platforms fail to set up.
         # Otherwise the bluetooth callback and a live connection would leak.
-        hass.data[DOMAIN].pop(entry.entry_id, None)
         await api.disconnect()
         raise
 
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: CasambiConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     # Keep the connection when a platform refused to unload. The entry stays
     # loaded in that case and its remaining entities still need it.
     if unload_ok:
-        casa_api: CasambiApi = hass.data[DOMAIN].pop(entry.entry_id)
-        await casa_api.disconnect()
+        await entry.runtime_data.disconnect()
 
     return unload_ok
 
 
-async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+async def async_remove_entry(hass: HomeAssistant, entry: CasambiConfigEntry) -> None:
     """Clean up persistent data when the config entry is deleted."""
     uuid = entry.data[CONF_ADDRESS].replace(":", "").lower()
     cache_dir = get_cache_dir(hass) / uuid
@@ -104,11 +104,11 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 async def async_remove_config_entry_device(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: CasambiConfigEntry,
     device_entry: DeviceEntry,
 ) -> bool:
     """Allow removing a device that is no longer part of this Casambi network."""
-    api: CasambiApi = hass.data[DOMAIN][config_entry.entry_id]
+    api = config_entry.runtime_data
     live = {(DOMAIN, api.casa.networkId)}
     live |= {(DOMAIN, unit.uuid) for unit in api.casa.units}
     return not (device_entry.identifiers & live)
@@ -126,7 +126,7 @@ class CasambiApi:
     def __init__(
         self,
         hass: HomeAssistant,
-        conf_entry: ConfigEntry,
+        conf_entry: CasambiConfigEntry,
         address: str,
         password: str,
     ) -> None:

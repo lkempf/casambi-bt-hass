@@ -1,6 +1,7 @@
 """Support for the vertical control of Casambi compatible lights."""
 
 from abc import ABCMeta
+from dataclasses import dataclass
 import logging
 from typing import cast
 
@@ -11,13 +12,12 @@ from homeassistant.components.number import (
     NumberEntity,
     NumberEntityDescription,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from . import CasambiApi
-from .const import CONF_IMPORT_GROUPS, DOMAIN
-from .entities import (
+from . import CasambiApi, CasambiConfigEntry
+from .const import CONF_IMPORT_GROUPS
+from .entity import (
     CasambiEntity,
     CasambiNetworkGroup,
     CasambiUnitEntity,
@@ -29,11 +29,11 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    config_entry: CasambiConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Create the Casambi vertical entity."""
-    casa_api: CasambiApi = hass.data[DOMAIN][config_entry.entry_id]
+    casa_api = config_entry.runtime_data
 
     light_entities: list[CasambiVerticalNumber] = [
         CasambiVerticalNumberUnit(casa_api, u)
@@ -54,6 +54,7 @@ async def async_setup_entry(
     async_add_entities(light_entities + group_entities)
 
 
+@dataclass(frozen=True, kw_only=True)
 class TypedNumberEntityDescription(TypedEntityDescription, NumberEntityDescription):
     """Describes a CasambiVerticalNumberUnit."""
 

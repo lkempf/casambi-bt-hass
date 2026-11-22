@@ -7,7 +7,6 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.casambi_bt import CasambiApi
-from custom_components.casambi_bt.const import DOMAIN
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
@@ -28,7 +27,7 @@ async def test_write_error_raises_and_schedules_reconnect(
     await hass.async_block_till_done()
     assert config_entry.state is ConfigEntryState.LOADED
 
-    api: CasambiApi = hass.data[DOMAIN][config_entry.entry_id]
+    api: CasambiApi = config_entry.runtime_data
 
     mock_casambi.setLevel = AsyncMock(side_effect=BluetoothError())
 

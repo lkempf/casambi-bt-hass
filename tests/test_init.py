@@ -33,15 +33,13 @@ async def test_setup_and_unload(
     assert config_entry.state is ConfigEntryState.LOADED
     mock_casambi.connect.assert_awaited_once()
     mock_casambi.registerDisconnectCallback.assert_called_once()
-    assert DOMAIN in hass.data
-    assert config_entry.entry_id in hass.data[DOMAIN]
+    assert config_entry.runtime_data.available
 
     await hass.config_entries.async_unload(config_entry.entry_id)
     await hass.async_block_till_done()
 
     assert config_entry.state is ConfigEntryState.NOT_LOADED
     mock_casambi.disconnect.assert_awaited_once()
-    assert config_entry.entry_id not in hass.data[DOMAIN]
 
 
 @pytest.mark.parametrize(
@@ -104,7 +102,6 @@ async def test_setup_failure_after_connect_cleans_up(
 
     assert config_entry.state is ConfigEntryState.SETUP_ERROR
     mock_casambi.disconnect.assert_awaited_once()
-    assert config_entry.entry_id not in hass.data.get(DOMAIN, {})
 
 
 async def test_remove_entry_deletes_cache(

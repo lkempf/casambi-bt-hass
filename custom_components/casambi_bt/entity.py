@@ -16,7 +16,7 @@ from . import DOMAIN, CasambiApi
 _LOGGER: Final = logging.getLogger(__name__)
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class TypedEntityDescription(EntityDescription):
     """Describes a CasambiUnitEntity."""
 

@@ -8,7 +8,7 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.casambi_bt import CasambiApi
-from custom_components.casambi_bt.const import DOMAIN, RECONNECT_BACKOFF_MAX
+from custom_components.casambi_bt.const import RECONNECT_BACKOFF_MAX
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 
@@ -20,7 +20,7 @@ async def _setup(hass: HomeAssistant, config_entry: MockConfigEntry) -> CasambiA
     await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert config_entry.state is ConfigEntryState.LOADED
-    return hass.data[DOMAIN][config_entry.entry_id]
+    return config_entry.runtime_data
 
 
 async def test_disconnect_schedules_reconnect(
