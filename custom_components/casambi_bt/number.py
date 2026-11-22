@@ -3,7 +3,6 @@
 from abc import ABCMeta
 from dataclasses import dataclass
 import logging
-from typing import cast
 
 from CasambiBt import Group, Unit, UnitControlType
 
@@ -100,7 +99,7 @@ class CasambiVerticalNumberUnit(CasambiVerticalNumber, CasambiUnitEntity):
     @property
     def native_value(self) -> float | None:
         """Get the vertical value of the unit."""
-        unit = cast("Unit", self._obj)
+        unit = self._obj
         if unit.state is not None and unit.state.vertical is not None:
             return float(unit.state.vertical)
         return None
@@ -124,7 +123,7 @@ class CasambiVerticalNumberGroup(CasambiVerticalNumber, CasambiNetworkGroup):
     @property
     def native_value(self) -> float | None:
         """Get the average vertical value of the group."""
-        group = cast("Group", self._obj)
+        group = self._obj
         values = [
             float(unit.state.vertical)
             for unit in group.units

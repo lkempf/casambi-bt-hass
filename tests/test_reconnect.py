@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from CasambiBt.errors import AuthenticationError, BluetoothError, ProtocolError
 import pytest
@@ -227,3 +227,95 @@ async def test_connection_changes_logged_once(
     infos = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
     assert infos.count("Lost connection to Casambi network AA:BB:CC:DD:EE:FF") == 1
     assert infos.count("Reconnected to Casambi network AA:BB:CC:DD:EE:FF") == 1
+
+
+@pytest.mark.usefixtures("mock_bluetooth", "enable_bluetooth")
+async def test_reconnect_edge_cases(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+) -> None:
+    """A missing device and a reconnect without connection must be retried."""
+    api = await _setup(hass, config_entry)
+
+    attempts = []
+
+    async def _reconnect(_device):
+        attempts.append(_device)
+        # The first call returns without connecting.
+        mock_casambi.connected = len(attempts) > 1
+
+    sleeps: list[float] = []
+
+    async def _sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    mock_casambi.connected = False
+    mock_casambi.reconnect = AsyncMock(side_effect=_reconnect)
+    device = MagicMock()
+
+    with (
+        patch("custom_components.casambi_bt.asyncio.sleep", new=_sleep),
+        patch(
+            "homeassistant.components.bluetooth.async_ble_device_from_address",
+            side_effect=[None, device, device],
+        ),
+    ):
+        api._schedule_reconnect()  # noqa: SLF001
+        await drain(hass)
+
+    assert len(attempts) == 2
+    assert api.available
+    # A missing device backs off for at least a minute.
+    assert any(delay >= 60 for delay in sleeps)
+
+
+@pytest.mark.usefixtures("mock_bluetooth", "enable_bluetooth")
+async def test_bluetooth_advertisement_triggers_reconnect(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+) -> None:
+    """An advertisement of the unavailable network must start a reconnect."""
+    api = await _setup(hass, config_entry)
+
+    service_info = MagicMock(connectable=True)
+    api._bluetooth_callback(service_info, MagicMock())  # noqa: SLF001
+    await drain(hass)
+    mock_casambi.reconnect.assert_not_awaited()
+
+    api._link_up = False  # noqa: SLF001
+    mock_casambi.connected = False
+    api._bluetooth_callback(service_info, MagicMock())  # noqa: SLF001
+    await drain(hass)
+    mock_casambi.reconnect.assert_awaited_once()
+    assert api.available
+
+
+@pytest.mark.usefixtures("mock_bluetooth", "enable_bluetooth")
+async def test_no_reconnect_after_disconnect(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Once disconnected on purpose no reconnect may be scheduled."""
+    api = await _setup(hass, config_entry)
+
+    hanging = asyncio.Event()
+
+    async def _reconnect(_device):
+        await hanging.wait()
+
+    mock_casambi.connected = False
+    mock_casambi.reconnect = AsyncMock(side_effect=_reconnect)
+    mock_casambi.disconnect = AsyncMock(side_effect=RuntimeError("boom"))
+
+    api._schedule_reconnect()  # noqa: SLF001
+    await drain(hass, rounds=5)
+    await api.disconnect()
+
+    assert "Error during disconnect." in caplog.text
+    api._schedule_reconnect()  # noqa: SLF001
+    await drain(hass, rounds=5)
+    assert mock_casambi.reconnect.await_count == 1
