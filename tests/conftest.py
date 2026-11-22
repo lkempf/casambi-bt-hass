@@ -230,3 +230,14 @@ def make_state(**values: Any) -> UnitState:
     for key, value in values.items():
         setattr(state, key, value)
     return state
+
+
+@pytest.fixture
+def group_config_entry(config_entry: MockConfigEntry) -> MockConfigEntry:
+    """Create a mock config entry that imports groups."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        title=config_entry.title,
+        data={**config_entry.data, "import_groups": True},
+        unique_id=config_entry.unique_id,
+    )

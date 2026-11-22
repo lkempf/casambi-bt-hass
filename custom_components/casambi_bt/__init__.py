@@ -2,6 +2,7 @@
 
 import asyncio
 from collections.abc import Callable, Iterable
+import contextlib
 import inspect
 import logging
 from pathlib import Path
@@ -21,7 +22,7 @@ from CasambiBt.errors import (
 from homeassistant.components import bluetooth
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryNotReady,
@@ -385,46 +386,48 @@ class CasambiApi:
         self._notify_connection_state()
         self._schedule_reconnect()
 
-    def register_connection_updates(self, c: Callable[[], None]) -> None:
+    def register_connection_updates(self, c: Callable[[], None]) -> CALLBACK_TYPE:
         """Register a callback for changes of the connection state.
 
         :param c: The callback.
+        :return: A function that unregisters the callback.
         """
         self._connection_callbacks.append(c)
 
-    def unregister_connection_updates(self, c: Callable[[], None]) -> None:
-        """Unregister a callback for changes of the connection state.
+        @callback
+        def _unregister() -> None:
+            with contextlib.suppress(ValueError):
+                self._connection_callbacks.remove(c)
 
-        :param c: The callback.
-        """
-        self._connection_callbacks.remove(c)
+        return _unregister
 
     @callback
     def _notify_connection_state(self) -> None:
-        for c in self._connection_callbacks:
+        for c in list(self._connection_callbacks):
             c()
 
-    def register_unit_updates(self, unit: Unit, c: Callable[[Unit], None]) -> None:
+    def register_unit_updates(
+        self, unit: Unit, c: Callable[[Unit], None]
+    ) -> CALLBACK_TYPE:
         """Register a callback for unit updates.
 
         :param unit: The unit for which changes should be reported.
         :param c: The callback.
+        :return: A function that unregisters the callback.
         """
-        self._callback_map.setdefault(unit.deviceId, []).append(c)
+        callbacks = self._callback_map.setdefault(unit.deviceId, [])
+        callbacks.append(c)
 
-    def unregister_unit_updates(self, unit: Unit, c: Callable[[Unit], None]) -> None:
-        """Unregister a callback for unit updates.
+        @callback
+        def _unregister() -> None:
+            with contextlib.suppress(ValueError):
+                callbacks.remove(c)
 
-        :param unit: The unit for which changes should no longer be reported.
-        :param c: The callback.
-        """
-        self._callback_map[unit.deviceId].remove(c)
+        return _unregister
 
     @callback
     def _unit_changed_handler(self, unit: Unit) -> None:
-        if unit.deviceId not in self._callback_map:
-            return
-        for c in self._callback_map[unit.deviceId]:
+        for c in list(self._callback_map.get(unit.deviceId, ())):
             c(unit)
 
     @callback
