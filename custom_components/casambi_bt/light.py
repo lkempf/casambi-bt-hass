@@ -53,7 +53,7 @@ async def async_setup_entry(
     ]
 
     group_entities: list[CasambiLight] = []
-    if config_entry.data[CONF_IMPORT_GROUPS]:
+    if config_entry.options.get(CONF_IMPORT_GROUPS, True):
         group_entities = [CasambiLightGroup(casa_api, g) for g in casa_api.get_groups()]
 
     async_add_entities(light_entities + group_entities)

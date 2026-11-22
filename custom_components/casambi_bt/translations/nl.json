@@ -1,28 +1,79 @@
 {
-    "config": {
-        "abort": {
-            "already_configured": "Het apparaat is al geconfigureerd",
-            "bluetooth_error": "Bluetooth lijkt niet goed te werken.",
-            "cannot_connect": "Kon geen verbinding maken",
-            "invalid_auth": "Foutieve authenticatie",
-            "reauth_successful": "Her-authenticatie was succesvol",
-            "unknown": "Onverwachte fout"
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "user": {
+        "title": "Stel je Casambi netwerk in",
+        "description": "Het bluetooth MAC-adres (netwerk-ID) vind je in de armatuurgegevens van de Casambi app.",
+        "data": {
+          "address": "Bluetooth MAC-adres",
+          "password": "Wachtwoord",
+          "import_groups": "Groepen importeren"
         },
-        "error": {
-            "cannot_connect": "Kon geen verbinding maken",
-            "invalid_address": "The bluetooth MAC address of the network is invalid.",
-            "invalid_auth": "Foutieve authenticatie",
-            "unknown": "Onverwachte fout"
-        },
-        "step": {
-            "user": {
-                "data": {
-                    "address": "Adres (Casambi NetworkID)",
-                    "import_groups": "Importeer groupen?",
-                    "password": "Wachtwoord"
-                },
-                "title": "Configureer uw Casambi netwerk"
-            }
+        "data_description": {
+          "address": "Bluetooth MAC-adres van het Casambi netwerk, bijv. AA:BB:CC:DD:EE:FF.",
+          "password": "Wachtwoord van het Casambi netwerk, niet van je Casambi account.",
+          "import_groups": "Licht- en nummerentiteiten aanmaken voor de groepen van het netwerk."
         }
+      },
+      "bluetooth_confirm": {
+        "title": "{name} instellen",
+        "description": "Er is een Casambi netwerk gevonden. Voer het wachtwoord in om het in te stellen.",
+        "data": {
+          "password": "Wachtwoord",
+          "import_groups": "Groepen importeren"
+        },
+        "data_description": {
+          "password": "Wachtwoord van het Casambi netwerk, niet van je Casambi account.",
+          "import_groups": "Lichtentiteiten aanmaken voor de groepen van het netwerk."
+        }
+      },
+      "reauth_confirm": {
+        "title": "{name} opnieuw authenticeren",
+        "description": "Het wachtwoord van het Casambi netwerk {name} is geweigerd. Voer het huidige netwerkwachtwoord in.",
+        "data": {
+          "password": "Wachtwoord"
+        },
+        "data_description": {
+          "password": "Wachtwoord van het Casambi netwerk, niet van je Casambi account."
+        }
+      },
+      "reconfigure": {
+        "title": "Wachtwoord van {name} wijzigen",
+        "description": "Voer het nieuwe wachtwoord van het Casambi netwerk {name} in.",
+        "data": {
+          "password": "Wachtwoord"
+        },
+        "data_description": {
+          "password": "Wachtwoord van het Casambi netwerk, niet van je Casambi account."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Kan geen verbinding maken",
+      "invalid_address": "Het bluetooth MAC-adres van het netwerk is ongeldig.",
+      "invalid_auth": "Ongeldige authenticatie",
+      "unknown": "Onverwachte fout"
+    },
+    "abort": {
+      "already_configured": "Apparaat is al geconfigureerd",
+      "bluetooth_error": "Er is geen bluetooth adapter of proxy beschikbaar die verbindingen ondersteunt. Stel eerst bluetooth in Home Assistant in.",
+      "not_supported": "Het gevonden apparaat accepteert geen verbindingen.",
+      "reauth_successful": "Herauthenticatie geslaagd",
+      "reconfigure_successful": "Herconfiguratie geslaagd"
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opties van het Casambi netwerk",
+        "data": {
+          "import_groups": "Groepen importeren"
+        },
+        "data_description": {
+          "import_groups": "Licht- en nummerentiteiten aanmaken voor de groepen van het netwerk. De integratie wordt na een wijziging opnieuw geladen."
+        }
+      }
+    }
+  }
 }

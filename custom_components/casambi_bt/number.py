@@ -41,7 +41,7 @@ async def async_setup_entry(
     ]
 
     group_entities: list[CasambiVerticalNumber] = []
-    if config_entry.data[CONF_IMPORT_GROUPS]:
+    if config_entry.options.get(CONF_IMPORT_GROUPS, True):
         for g in casa_api.get_groups():
             has_vert = False
             for u in g.units:

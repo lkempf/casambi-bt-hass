@@ -33,6 +33,7 @@ from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers.httpx_client import get_async_client
 
 from .const import (
+    CONF_IMPORT_GROUPS,
     CONNECT_TIMEOUT,
     DOMAIN,
     PLATFORMS,
@@ -75,6 +76,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: CasambiConfigEntry) -> b
         # Otherwise the bluetooth callback and a live connection would leak.
         await api.disconnect()
         raise
+
+    return True
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: CasambiConfigEntry) -> bool:
+    """Migrate old config entries."""
+    if entry.version > 2:
+        # Downgraded from a future version which we can't handle.
+        return False
+
+    if entry.version == 1:
+        # Version 2 moved the group import setting to the options because
+        # it doesn't affect the connection.
+        data = dict(entry.data)
+        import_groups = data.pop(CONF_IMPORT_GROUPS, True)
+        hass.config_entries.async_update_entry(
+            entry,
+            data=data,
+            options={**entry.options, CONF_IMPORT_GROUPS: import_groups},
+            version=2,
+        )
+        _LOGGER.debug("Migrated config entry %s to version 2", entry.entry_id)
 
     return True
 

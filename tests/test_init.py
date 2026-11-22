@@ -8,13 +8,13 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.casambi_bt import async_remove_entry
-from custom_components.casambi_bt.const import DOMAIN
+from custom_components.casambi_bt.const import CONF_IMPORT_GROUPS, DOMAIN
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import Platform
+from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
-from .conftest import TEST_UUID, MockCasambi, make_state, make_unit
+from .conftest import TEST_ADDRESS, TEST_UUID, MockCasambi, make_state, make_unit
 
 
 async def test_setup_and_unload(
@@ -175,3 +175,46 @@ async def test_network_device_registered_before_platforms(
     assert unit_device is not None
     assert unit_device.via_device_id == network.id
     assert len(hass.states.async_entity_ids("light")) == 1
+
+
+@pytest.mark.parametrize(
+    ("stored", "expected"), [({"import_groups": False}, False), ({}, True)]
+)
+@pytest.mark.usefixtures("mock_bluetooth", "mock_casambi", "enable_bluetooth")
+async def test_migrate_entry_v1(
+    hass: HomeAssistant, stored: dict[str, bool], expected: bool
+) -> None:
+    """Version 1 entries must move the group import setting to the options."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Test Network",
+        data={CONF_ADDRESS: TEST_ADDRESS, CONF_PASSWORD: "secret", **stored},
+        unique_id=TEST_ADDRESS,
+        version=1,
+    )
+    entry.add_to_hass(hass)
+
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert entry.version == 2
+    assert entry.data == {CONF_ADDRESS: TEST_ADDRESS, CONF_PASSWORD: "secret"}
+    assert entry.options == {CONF_IMPORT_GROUPS: expected}
+
+
+@pytest.mark.usefixtures("mock_bluetooth", "mock_casambi", "enable_bluetooth")
+async def test_migrate_entry_from_future_version(hass: HomeAssistant) -> None:
+    """Entries of a future version must not be set up."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_ADDRESS: TEST_ADDRESS, CONF_PASSWORD: "secret"},
+        unique_id=TEST_ADDRESS,
+        version=3,
+    )
+    entry.add_to_hass(hass)
+
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.MIGRATION_ERROR
