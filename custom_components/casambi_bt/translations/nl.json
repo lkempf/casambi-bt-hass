@@ -99,6 +99,9 @@
     },
     "invalid_address": {
       "message": "Het opgeslagen bluetooth adres {address} is ongeldig. Verwijder het netwerk en voeg het opnieuw toe."
+    },
+    "invalid_value": {
+      "message": "De waarde wordt niet ondersteund door de Casambi lamp."
     }
   },
   "entity": {

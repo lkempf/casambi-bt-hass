@@ -99,6 +99,9 @@
     },
     "invalid_address": {
       "message": "The stored bluetooth address {address} is invalid. Remove the network and add it again."
+    },
+    "invalid_value": {
+      "message": "The value is not supported by the Casambi light."
     }
   },
   "entity": {

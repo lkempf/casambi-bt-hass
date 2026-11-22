@@ -99,6 +99,9 @@
     },
     "invalid_address": {
       "message": "Die gespeicherte Bluetooth Adresse {address} ist ungültig. Entferne das Netzwerk und füge es erneut hinzu."
+    },
+    "invalid_value": {
+      "message": "Der Wert wird von der Casambi Leuchte nicht unterstützt."
     }
   },
   "entity": {

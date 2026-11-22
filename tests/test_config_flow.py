@@ -412,3 +412,33 @@ async def test_reauth_cloud_unreachable(
     assert result["errors"] == {"base": "cloud_unreachable"}
     assert config_entry.data[CONF_PASSWORD] == "secret-password"
     assert config_entry.state is ConfigEntryState.LOADED
+
+
+@pytest.mark.usefixtures("mock_bluetooth")
+async def test_validate_input_disconnects_on_failure(
+    hass: HomeAssistant, mock_casambi: MockCasambi
+) -> None:
+    """The validation must close its connection even when it fails."""
+    mock_casambi.connect = AsyncMock(side_effect=BluetoothError())
+    mock_casambi.disconnect = AsyncMock(side_effect=RuntimeError("already gone"))
+
+    with pytest.raises(BluetoothError):
+        await _validate_input(hass, TEST_ADDRESS, "secret-password")
+
+    mock_casambi.disconnect.assert_awaited_once()
+
+
+@pytest.mark.usefixtures("mock_bluetooth")
+async def test_validate_input_rate_limit_keeps_cache(
+    hass: HomeAssistant, mock_casambi: MockCasambi
+) -> None:
+    """A rate limit must not drop the cache for a retry that can't succeed."""
+    mock_casambi.connect = AsyncMock(
+        side_effect=AuthenticationError("Login failed: 403")
+    )
+
+    with pytest.raises(AuthenticationError):
+        await _validate_input(hass, TEST_ADDRESS, "secret-password")
+
+    mock_casambi.connect.assert_awaited_once()
+    mock_casambi.invalidateCache.assert_not_awaited()

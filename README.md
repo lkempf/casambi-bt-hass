@@ -39,7 +39,7 @@ The network is discovered automatically when a bluetooth adapter or proxy that s
 | Password | Password of the Casambi network (not of your Casambi account). |
 | Import groups | Create entities for the groups of the network. Can be changed later under *Configure*; the integration reloads afterwards. |
 
-The password can be changed with *Reconfigure* on the integration page. If the network rejects the stored password, Home Assistant asks for the new one (re-authentication).
+The password can be changed with *Reconfigure* on the integration page. If the network rejects the stored password, Home Assistant asks for the new one (re-authentication). Both check the password with the Casambi cloud, so they need an internet connection. If the cloud temporarily refuses new logins, wait a few minutes and try again.
 
 ## Features
 
@@ -85,6 +85,7 @@ The integration keeps a bluetooth connection to the network and receives state c
 - **No connectable bluetooth adapter**: a repair issue is shown when Home Assistant has no local adapter or active bluetooth proxy that supports connections. Add one; the integration connects as soon as it is available.
 - **Failed to connect / network not found**: make sure the network is in range of an adapter or proxy and configured as described under *Network configuration*.
 - **Invalid authentication**: use *Reconfigure* or the re-authentication prompt to enter the current network password.
+- **Cloud refuses logins / password can't be verified**: the Casambi cloud limits new logins. The integration keeps retrying on its own; for the setup dialogs wait a few minutes and check the internet connection.
 - **Diagnostics**: download them from the integration page; passwords and addresses are redacted.
 - For anything else enable the debug log as described under *Reporting issues*.
 

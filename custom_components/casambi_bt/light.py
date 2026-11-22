@@ -159,7 +159,7 @@ class CasambiLight(CasambiEntity, LightEntity, metaclass=ABCMeta):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the entity of."""
-        await self._api.casa.turnOff(self._obj)
+        await self._api.async_send(self._api.casa.turnOff, self._obj)
 
 
 class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
@@ -267,7 +267,7 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
             set_state = True
 
         if not set_state:
-            await self._api.casa.turnOn(unit)
+            await self._api.async_send(self._api.casa.turnOn, unit)
             return
 
         # The state is sent as a whole, so it must say "on". The copy of an
@@ -275,14 +275,14 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
         # unit off although only the color was meant to change.
         if unit.unitType.get_control(UnitControlType.ONOFF) is not None:
             state.onoff = True
-        await self._api.casa.setUnitState(unit, state)
+        await self._api.async_send(self._api.casa.setUnitState, unit, state)
         if (
             ATTR_BRIGHTNESS not in kwargs
             and not state.dimmer
             and unit.unitType.get_control(UnitControlType.DIMMER) is not None
         ):
             # No level known: restore the last level like a plain turn on.
-            await self._api.casa.turnOn(unit)
+            await self._api.async_send(self._api.casa.turnOn, unit)
 
 
 class CasambiLightGroup(CasambiLight, CasambiNetworkGroup):
@@ -379,32 +379,38 @@ class CasambiLightGroup(CasambiLight, CasambiNetworkGroup):
         """Turn on all units in the group."""
         was_set = False
         if ATTR_BRIGHTNESS in kwargs:
-            await self._api.casa.setLevel(self._obj, kwargs[ATTR_BRIGHTNESS])
+            await self._api.async_send(
+                self._api.casa.setLevel, self._obj, kwargs[ATTR_BRIGHTNESS]
+            )
             was_set = True
         if ATTR_COLOR_TEMP_KELVIN in kwargs:
-            await self._api.casa.setTemperature(
-                self._obj, kwargs[ATTR_COLOR_TEMP_KELVIN]
+            await self._api.async_send(
+                self._api.casa.setTemperature, self._obj, kwargs[ATTR_COLOR_TEMP_KELVIN]
             )
             was_set = True
         if ATTR_RGB_COLOR in kwargs:
-            await self._api.casa.setColor(self._obj, kwargs[ATTR_RGB_COLOR])
+            await self._api.async_send(
+                self._api.casa.setColor, self._obj, kwargs[ATTR_RGB_COLOR]
+            )
             was_set = True
         elif ATTR_RGBW_COLOR in kwargs:
             rgb, w = kwargs[ATTR_RGBW_COLOR][:3], kwargs[ATTR_RGBW_COLOR][3]
-            await self._api.casa.setColor(self._obj, rgb)
-            await self._api.casa.setWhite(self._obj, w)
+            await self._api.async_send(self._api.casa.setColor, self._obj, rgb)
+            await self._api.async_send(self._api.casa.setWhite, self._obj, w)
             was_set = True
         elif ATTR_XY_COLOR in kwargs:
-            await self._api.casa.setColorXY(self._obj, kwargs[ATTR_XY_COLOR])
+            await self._api.async_send(
+                self._api.casa.setColorXY, self._obj, kwargs[ATTR_XY_COLOR]
+            )
             was_set = True
 
         if not was_set:
-            await self._api.casa.turnOn(self._obj)
+            await self._api.async_send(self._api.casa.turnOn, self._obj)
         elif ATTR_BRIGHTNESS not in kwargs:
             if level := self.brightness:
                 # Sync the level of the group so that all units turn on.
-                await self._api.casa.setLevel(self._obj, level)
+                await self._api.async_send(self._api.casa.setLevel, self._obj, level)
             else:
                 # The group is off: setting the color alone keeps it off and
                 # syncing a level of 0 would turn it off again.
-                await self._api.casa.turnOn(self._obj)
+                await self._api.async_send(self._api.casa.turnOn, self._obj)

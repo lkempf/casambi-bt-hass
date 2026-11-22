@@ -1,15 +1,14 @@
 """The Casambi Bluetooth integration."""
 
 import asyncio
-from collections.abc import Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable
 import contextlib
-import inspect
 import logging
 from pathlib import Path
 import random
 import re
 import shutil
-from typing import Any, Final, cast
+from typing import Any, Final
 
 from CasambiBt import Casambi, Group, Scene, Unit, UnitControlType
 from CasambiBt.errors import (
@@ -29,6 +28,7 @@ from homeassistant.exceptions import (
     ConfigEntryError,
     ConfigEntryNotReady,
     HomeAssistantError,
+    ServiceValidationError,
 )
 from homeassistant.helpers import device_registry as dr, issue_registry as ir
 from homeassistant.helpers.device_registry import DeviceEntry
@@ -257,8 +257,7 @@ class CasambiApi:
         self.conf_entry = conf_entry
         self.address = address
         self.password = password
-        self._casa = Casambi(get_async_client(hass), get_cache_dir(hass))
-        self.casa = cast(Casambi, CasambiProxy(self, self._casa))
+        self.casa = Casambi(get_async_client(hass), get_cache_dir(hass))
 
         self._callback_map: dict[int, list[Callable[[Unit], None]]] = {}
         self._connection_callbacks: list[Callable[[], None]] = []
@@ -312,12 +311,12 @@ class CasambiApi:
             if not device:
                 raise BluetoothDeviceNotFoundError  # noqa: TRY301
 
-            self._casa.registerDisconnectCallback(self._casa_disconnect)
-            self._casa.registerUnitChangedHandler(self._unit_changed_handler)
+            self.casa.registerDisconnectCallback(self._casa_disconnect)
+            self.casa.registerUnitChangedHandler(self._unit_changed_handler)
 
             try:
                 await asyncio.wait_for(
-                    self._casa.connect(device, self.password), CONNECT_TIMEOUT
+                    self.casa.connect(device, self.password), CONNECT_TIMEOUT
                 )
             except TimeoutError as err:
                 raise BluetoothError(
@@ -386,12 +385,10 @@ class CasambiApi:
                     raise BluetoothDeviceNotFoundError  # noqa: TRY301
 
                 try:
-                    await asyncio.wait_for(
-                        self._casa.reconnect(device), CONNECT_TIMEOUT
-                    )
+                    await asyncio.wait_for(self.casa.reconnect(device), CONNECT_TIMEOUT)
                 except TimeoutError as err:
                     raise BluetoothError("Reconnect attempt timed out.") from err
-                if not self._casa.connected:
+                if not self.casa.connected:
                     raise BluetoothError(  # noqa: TRY301
                         "Reconnect returned without a connection."
                     )
@@ -453,7 +450,39 @@ class CasambiApi:
     @property
     def available(self) -> bool:
         """Return True if the controller is available."""
-        return self._link_up and self._casa.connected
+        return self._link_up and self.casa.connected
+
+    async def async_send[**P](
+        self,
+        command: Callable[P, Awaitable[None]],
+        *args: P.args,
+        **kwargs: P.kwargs,
+    ) -> None:
+        """Send a command of the library and map its errors for actions.
+
+        A bluetooth error also triggers a reconnect. Errors are never
+        swallowed: the action must learn that the command wasn't delivered.
+        """
+        try:
+            await command(*args, **kwargs)
+        except BluetoothError as err:
+            _LOGGER.debug("Bluetooth error during write.", exc_info=True)
+            _LOGGER.info("Triggering reconnect after write failed.")
+            self._schedule_reconnect()
+            raise HomeAssistantError(
+                translation_domain=DOMAIN, translation_key="write_failed"
+            ) from err
+        except CasambiBtError as err:
+            # E.g. the connection is down and a reconnect is already running.
+            _LOGGER.debug("Write failed.", exc_info=True)
+            raise HomeAssistantError(
+                translation_domain=DOMAIN, translation_key="write_failed"
+            ) from err
+        except ValueError as err:
+            # The library validates values against the unit's controls.
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="invalid_value"
+            ) from err
 
     def diagnostics(self) -> dict[str, Any]:
         """Return diagnostic information about the connection."""
@@ -465,7 +494,7 @@ class CasambiApi:
         data: dict[str, Any] = {
             "available": self.available,
             "link_up": self._link_up,
-            "library_connected": self._casa.connected,
+            "library_connected": self.casa.connected,
             "reconnect_task": task_info,
             "connect_timeout": CONNECT_TIMEOUT,
             "backoff": {
@@ -483,10 +512,10 @@ class CasambiApi:
                     "online": unit.online,
                     "on": unit.is_on,
                 }
-                for unit in self._casa.units
+                for unit in self.casa.units
             ]
-            data["group_count"] = len(self._casa.groups)
-            data["scene_count"] = len(self._casa.scenes)
+            data["group_count"] = len(self.casa.groups)
+            data["scene_count"] = len(self.casa.scenes)
         except CasambiBtError:
             data["units"] = None
             _LOGGER.debug("Network information not available for diagnostics.")
@@ -499,22 +528,22 @@ class CasambiApi:
         """Return all units in the network optionally filtered by control type."""
 
         if not control_types:
-            return self._casa.units
+            return self.casa.units
 
         return filter(
             lambda u: any(uc.type in control_types for uc in u.unitType.controls),
-            self._casa.units,
+            self.casa.units,
         )
 
     def get_groups(self) -> Iterable[Group]:
         """Return all groups in the network."""
 
-        return self._casa.groups
+        return self.casa.groups
 
     def get_scenes(self) -> Iterable[Scene]:
         """Return all scenes in the network."""
 
-        return self._casa.scenes
+        return self.casa.scenes
 
     async def disconnect(self) -> None:
         """Disconnects from the controller and disables automatic reconnect."""
@@ -544,13 +573,13 @@ class CasambiApi:
 
         # This needs to happen before we disconnect.
         # We don't want to be informed about disconnects initiated by us.
-        self._casa.unregisterDisconnectCallback(self._casa_disconnect)
+        self.casa.unregisterDisconnectCallback(self._casa_disconnect)
 
         try:
-            await self._casa.disconnect()
+            await self.casa.disconnect()
         except Exception:
             _LOGGER.exception("Error during disconnect.")
-        self._casa.unregisterUnitChangedHandler(self._unit_changed_handler)
+        self.casa.unregisterUnitChangedHandler(self._unit_changed_handler)
 
     @callback
     def _casa_disconnect(self) -> None:
@@ -635,42 +664,3 @@ class CasambiApi:
                 # anything. See https://github.com/lkempf/casambi-bt-hass/issues/170.
                 eager_start=False,
             )
-
-
-class CasambiProxy:
-    """Proxy the write operations so that bluetooth errors automatically trigger a reconnect."""
-
-    def __init__(self, api: CasambiApi, casa: Casambi) -> None:
-        """Initialize a CasambiProxy."""
-        self._api = api
-        self._casa = casa
-
-    def __getattr__(self, name: str) -> Any:
-        """Wrap all async calls to trigger a reconnect on bluetooth errors."""
-        attr = getattr(self._casa, name)
-
-        if inspect.iscoroutinefunction(attr):
-
-            async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-                try:
-                    return await attr(*args, **kwargs)
-                except BluetoothError as err:
-                    _LOGGER.debug("Bluetooth error during write.", exc_info=True)
-                    _LOGGER.info("Triggering reconnect after write failed.")
-                    self._api._schedule_reconnect()  # noqa: SLF001
-                    # Don't swallow the error: the caller (service call)
-                    # must learn that the command wasn't delivered.
-                    raise HomeAssistantError(
-                        translation_domain=DOMAIN, translation_key="write_failed"
-                    ) from err
-                except CasambiBtError as err:
-                    # E.g. the connection is down and a reconnect is
-                    # already running. Report the failed action.
-                    _LOGGER.debug("Write failed.", exc_info=True)
-                    raise HomeAssistantError(
-                        translation_domain=DOMAIN, translation_key="write_failed"
-                    ) from err
-
-            return async_wrapper
-
-        return attr

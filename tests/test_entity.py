@@ -1,7 +1,5 @@
 """Test the shared entity behaviour."""
 
-from copy import copy
-
 from CasambiBt import Group, UnitControlType
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -40,20 +38,17 @@ async def test_unit_updates_are_written(
     assert hass.states.get(unit_entity).state == STATE_OFF
     assert hass.states.get(group_entity).state == STATE_OFF
 
+    # Like casambi-bt: update the unit object in place, then notify.
     handler = mock_casambi.registerUnitChangedHandler.call_args.args[0]
-    updated = copy(unit)
-    updated._state = make_state(dimmer=200)  # noqa: SLF001
-    handler(updated)
+    unit._state = make_state(dimmer=200)  # noqa: SLF001
+    handler(unit)
     await hass.async_block_till_done()
 
     assert hass.states.get(unit_entity).state == STATE_ON
     assert hass.states.get(group_entity).state == STATE_ON
 
-    # An update without a state only carries the online flag.
-    offline = copy(unit)
-    offline._state = None  # noqa: SLF001
-    offline._online = False  # noqa: SLF001
-    handler(offline)
+    unit._online = False  # noqa: SLF001
+    handler(unit)
     await hass.async_block_till_done()
 
     assert hass.states.get(unit_entity).state == STATE_UNAVAILABLE

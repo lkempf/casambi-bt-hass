@@ -47,7 +47,11 @@ class CasambiEntity(Entity, metaclass=ABCMeta):
         return self._api.available
 
     @callback
-    def _change_callback(self, _unit: CasambiUnit) -> None:
+    def _change_callback(self, unit: CasambiUnit) -> None:
+        # casambi-bt updates its own unit objects in place and passes them
+        # to the callback. Entities hold references to the same objects, so
+        # only the state needs to be written.
+        _LOGGER.debug("Handling state change for unit %i", unit.deviceId)
         self.async_write_ha_state()
 
 
@@ -114,20 +118,10 @@ class CasambiNetworkGroup(CasambiNetworkEntity, metaclass=ABCMeta):
 
     @callback
     def _change_callback(self, unit: CasambiUnit) -> None:
-        group = cast("CasambiGroup", self._obj)
-        _LOGGER.debug(
-            "Handling state change for unit %i in group %i",
-            unit.deviceId,
-            group.groudId,
-        )
-        if unit.state:
-            self._unit_map[unit.deviceId] = unit
-        else:
-            own_unit = self._unit_map[unit.deviceId]
-            # This update doesn't have a state.
-            # This can happen if the unit isn't online so only look at that part.
-            own_unit._online = unit.online  # noqa: SLF001
-        return super()._change_callback(unit)
+        # Keep the reference current in case the library ever passes a new
+        # object for a unit.
+        self._unit_map[unit.deviceId] = unit
+        super()._change_callback(unit)
 
     async def async_added_to_hass(self) -> None:
         """Run when the group is about to be added to hass."""
@@ -171,18 +165,6 @@ class CasambiUnitEntity(CasambiEntity, metaclass=ABCMeta):
         """Return True if the unit is available."""
         unit = cast("CasambiUnit", self._obj)
         return super().available and unit.online
-
-    @callback
-    def _change_callback(self, unit: CasambiUnit) -> None:
-        _LOGGER.debug("Handling state change for unit %i", unit.deviceId)
-        if unit.state:
-            self._obj = unit
-        else:
-            own_unit = cast("CasambiUnit", self._obj)
-            # This update doesn't have a state.
-            # This can happen if the unit isn't online so only look at that part.
-            own_unit._online = unit.online  # noqa: SLF001
-        return super()._change_callback(unit)
 
     async def async_added_to_hass(self) -> None:
         """Run when the unit is about to be added to hass."""
