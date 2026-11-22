@@ -92,5 +92,23 @@
     "write_failed": {
       "message": "Sending the command to the Casambi network failed."
     }
+  },
+  "entity": {
+    "binary_sensor": {
+      "status": {
+        "name": "Status"
+      }
+    },
+    "number": {
+      "vertical": {
+        "name": "Vertical"
+      }
+    }
+  },
+  "issues": {
+    "no_connectable_scanner": {
+      "title": "No bluetooth adapter for Casambi",
+      "description": "The Casambi network {address} can't be reached because Home Assistant has no bluetooth adapter or proxy that supports connections. Add a local bluetooth adapter or an active bluetooth proxy. The integration connects automatically once one is available."
+    }
   }
 }

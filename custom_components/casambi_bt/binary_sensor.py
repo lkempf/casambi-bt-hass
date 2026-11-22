@@ -23,7 +23,7 @@ PARALLEL_UPDATES = 0
 NETWORK_SENSORS: tuple[BinarySensorEntityDescription, ...] = (
     BinarySensorEntityDescription(
         key="status",
-        name="Status",
+        translation_key="status",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         entity_category=EntityCategory.DIAGNOSTIC,
     ),

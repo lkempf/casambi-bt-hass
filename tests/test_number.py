@@ -57,7 +57,15 @@ async def test_vertical_unit_and_group(
     # Only units and groups with a vertical control get an entity.
     assert len(hass.states.async_entity_ids("number")) == 3
 
-    assert float(hass.states.get(unit_entity).state) == 100
+    unit_state = hass.states.get(unit_entity)
+    assert float(unit_state.state) == 100
+    # The vertical control is a light distribution, not an illuminance.
+    assert "device_class" not in unit_state.attributes
+    assert unit_state.attributes["friendly_name"] == "Unit 1 Vertical"
+    assert registry.async_get(unit_entity).translation_key == "vertical"
+    assert hass.states.get(group_entity).attributes["friendly_name"] == (
+        "Test Network Office"
+    )
     assert float(hass.states.get(group_entity).state) == 150
 
     await hass.services.async_call(

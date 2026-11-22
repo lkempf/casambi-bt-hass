@@ -26,6 +26,9 @@ class TypedEntityDescription(EntityDescription):
 class CasambiEntity(Entity, metaclass=ABCMeta):
     """Placeholder class for storing a Casambi object."""
 
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
     def __init__(
         self,
         api: CasambiApi,
@@ -37,9 +40,6 @@ class CasambiEntity(Entity, metaclass=ABCMeta):
         self._obj = obj
 
         self.entity_description = description
-        self._attr_has_entity_name = True
-
-        self._attr_should_poll = False
 
     @property
     def available(self) -> bool:
@@ -63,17 +63,19 @@ class CasambiNetworkEntity(CasambiEntity, metaclass=ABCMeta):
         """Initialize Casambi Entity."""
         super().__init__(api, description, obj)
 
-    @property
-    def unique_id(self) -> str:
-        """Return the unique ID for this entity."""
-        name = f"{self._api.casa.networkId}"
-        if self._obj is not None:
-            if isinstance(self._obj, CasambiScene):
-                name += "-scene"
-            elif isinstance(self._obj, CasambiGroup):
-                name += "-group"
-        name += f"-{self.entity_description.key}"
-        return name
+        unique_id = f"{api.casa.networkId}"
+        if isinstance(obj, CasambiScene):
+            unique_id += "-scene"
+        elif isinstance(obj, CasambiGroup):
+            unique_id += "-group"
+        self._attr_unique_id = f"{unique_id}-{description.key}"
+        self._attr_device_info = DeviceInfo(
+            name=api.casa.networkName,
+            manufacturer="Casambi",
+            model="Network",
+            identifiers={(DOMAIN, api.casa.networkId)},
+            connections={(device_registry.CONNECTION_BLUETOOTH, api.address)},
+        )
 
     async def async_added_to_hass(self) -> None:
         """Follow the connection state of the network."""
@@ -85,17 +87,6 @@ class CasambiNetworkEntity(CasambiEntity, metaclass=ABCMeta):
     @callback
     def _connection_callback(self) -> None:
         self.async_write_ha_state()
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return device information about this Casambi entity."""
-        return DeviceInfo(
-            name=self._api.casa.networkName,
-            manufacturer="Casambi",
-            model="Network",
-            identifiers={(DOMAIN, self._api.casa.networkId)},
-            connections={(device_registry.CONNECTION_BLUETOOTH, self._api.address)},
-        )
 
 
 class CasambiNetworkGroup(CasambiNetworkEntity, metaclass=ABCMeta):
@@ -157,27 +148,21 @@ class CasambiUnitEntity(CasambiEntity, metaclass=ABCMeta):
         """Initialize Casambi Entity."""
         super().__init__(api, description, obj)
 
-    @property
-    def unique_id(self) -> str:
-        """Return an unique identifier for the unit."""
-        unit = cast("CasambiUnit", self._obj)
-        desc = cast("TypedEntityDescription", self.entity_description)
-        return f"{self._api.casa.networkId}-unit-{unit.uuid}-{desc.entity_type}"
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return specific device information."""
-        unit = cast("CasambiUnit", self._obj)
-        return DeviceInfo(
-            name=unit.name,
-            manufacturer=unit.unitType.manufacturer,
-            model=unit.unitType.model,
-            sw_version=unit.firmwareVersion,
-            identifiers={(DOMAIN, unit.uuid)},
+        self._attr_unique_id = (
+            f"{api.casa.networkId}-unit-{obj.uuid}-{description.entity_type}"
+        )
+        # The network device is registered before the platforms are set up,
+        # so it can be resolved here.
+        self._attr_device_info = DeviceInfo(
+            name=obj.name,
+            manufacturer=obj.unitType.manufacturer,
+            model=obj.unitType.model,
+            sw_version=obj.firmwareVersion,
+            identifiers={(DOMAIN, obj.uuid)},
             via_device_id=device_registry.async_get_device_id_by_identifier(
-                self.hass,
-                (DOMAIN, self._api.casa.networkId),
-                config_entry_id=self._api.conf_entry.entry_id,
+                api.hass,
+                (DOMAIN, api.casa.networkId),
+                config_entry_id=api.conf_entry.entry_id,
             ),
         )
 

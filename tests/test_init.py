@@ -8,12 +8,15 @@ from CasambiBt.errors import AuthenticationError, BluetoothError, NetworkUpdateE
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.casambi_bt import async_remove_entry
+from custom_components.casambi_bt import (
+    async_remove_config_entry_device,
+    async_remove_entry,
+)
 from custom_components.casambi_bt.const import CONF_IMPORT_GROUPS, DOMAIN
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import device_registry as dr, issue_registry as ir
 
 from .conftest import TEST_ADDRESS, TEST_UUID, MockCasambi, make_state, make_unit
 
@@ -246,3 +249,125 @@ async def test_setup_retry_network_not_found(
 
     assert config_entry.state is ConfigEntryState.SETUP_RETRY
     assert "was not found" in config_entry.reason
+
+
+@pytest.mark.usefixtures("mock_bluetooth", "enable_bluetooth")
+async def test_no_connectable_scanner_creates_issue(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+) -> None:
+    """Without a connectable scanner a repair issue must guide the user."""
+    config_entry.add_to_hass(hass)
+    issue_id = f"no_connectable_scanner_{config_entry.entry_id}"
+    issue_registry = ir.async_get(hass)
+
+    with patch(
+        "homeassistant.components.bluetooth.async_scanner_count", return_value=0
+    ):
+        await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert config_entry.state is ConfigEntryState.SETUP_RETRY
+    mock_casambi.connect.assert_not_awaited()
+    issue = issue_registry.async_get_issue(DOMAIN, issue_id)
+    assert issue is not None
+    assert issue.translation_key == "no_connectable_scanner"
+    assert issue.translation_placeholders == {"address": TEST_ADDRESS}
+
+    # Once a scanner is available the setup succeeds and the issue is gone.
+    await hass.config_entries.async_reload(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert config_entry.state is ConfigEntryState.LOADED
+    assert issue_registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_remove_entry_deletes_issue(
+    hass: HomeAssistant, config_entry: MockConfigEntry, tmp_path
+) -> None:
+    """Deleting the entry must remove its repair issue."""
+    hass.config.config_dir = str(tmp_path)
+    issue_id = f"no_connectable_scanner_{config_entry.entry_id}"
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        issue_id,
+        is_fixable=False,
+        severity=ir.IssueSeverity.ERROR,
+        translation_key="no_connectable_scanner",
+    )
+
+    await async_remove_entry(hass, config_entry)
+
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
+
+
+@pytest.mark.usefixtures("mock_bluetooth", "enable_bluetooth")
+async def test_stale_devices_removed_on_setup(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+) -> None:
+    """Devices of units deleted from the network must be removed."""
+    config_entry.add_to_hass(hass)
+    device_registry = dr.async_get(hass)
+    stale = device_registry.async_get_or_create(
+        config_entry_id=config_entry.entry_id, identifiers={(DOMAIN, "gone")}
+    )
+    unit = make_unit(1, [UnitControlType.DIMMER])
+    mock_casambi.units = [unit]
+
+    await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert device_registry.async_get(stale.id) is None
+    assert device_registry.async_get_device_by_identifier(
+        (DOMAIN, unit.uuid), config_entry.entry_id
+    )
+    assert device_registry.async_get_device_by_identifier(
+        (DOMAIN, TEST_UUID), config_entry.entry_id
+    )
+
+
+@pytest.mark.usefixtures("mock_bluetooth", "enable_bluetooth")
+async def test_stale_devices_kept_without_units(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+) -> None:
+    """An empty unit list must not wipe the devices."""
+    config_entry.add_to_hass(hass)
+    device_registry = dr.async_get(hass)
+    device = device_registry.async_get_or_create(
+        config_entry_id=config_entry.entry_id, identifiers={(DOMAIN, "unit")}
+    )
+
+    await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert device_registry.async_get(device.id) is not None
+
+
+@pytest.mark.usefixtures("mock_bluetooth", "enable_bluetooth")
+async def test_remove_config_entry_device(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+) -> None:
+    """Only devices that are no longer in the network may be removed."""
+    unit = make_unit(1, [UnitControlType.DIMMER])
+    mock_casambi.units = [unit]
+    config_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    device_registry = dr.async_get(hass)
+    live = device_registry.async_get_device_by_identifier(
+        (DOMAIN, unit.uuid), config_entry.entry_id
+    )
+    assert not await async_remove_config_entry_device(hass, config_entry, live)
+
+    # The unit is removed in the app while Home Assistant is running.
+    mock_casambi.units = []
+    assert await async_remove_config_entry_device(hass, config_entry, live)

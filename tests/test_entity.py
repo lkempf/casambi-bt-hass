@@ -69,6 +69,9 @@ async def test_connection_state_updates_entities(
     api = await _setup(hass, config_entry)
     status = "binary_sensor.test_network_status"
     assert hass.states.get(status).state == STATE_ON
+    assert hass.states.get(status).attributes["friendly_name"] == (
+        "Test Network Status"
+    )
 
     api._link_up = False  # noqa: SLF001
     api._notify_connection_state()  # noqa: SLF001

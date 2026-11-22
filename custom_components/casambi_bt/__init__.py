@@ -28,7 +28,7 @@ from homeassistant.exceptions import (
     ConfigEntryNotReady,
     HomeAssistantError,
 )
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import device_registry as dr, issue_registry as ir
 from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers.httpx_client import get_async_client
 
@@ -69,6 +69,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: CasambiConfigEntry) -> b
         name=api.casa.networkName,
     )
 
+    _async_remove_stale_devices(hass, entry, api)
+
     try:
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     except Exception:
@@ -78,6 +80,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: CasambiConfigEntry) -> b
         raise
 
     return True
+
+
+def _live_identifiers(api: CasambiApi) -> set[tuple[str, str]]:
+    """Return the device identifiers of the network and its units."""
+    live = {(DOMAIN, api.casa.networkId)}
+    live |= {(DOMAIN, unit.uuid) for unit in api.casa.units}
+    return live
+
+
+@callback
+def _async_remove_stale_devices(
+    hass: HomeAssistant, entry: CasambiConfigEntry, api: CasambiApi
+) -> None:
+    """Remove devices of units that were deleted from the network.
+
+    The unit list comes from the network configuration loaded on connect,
+    so a missing unit was removed in the Casambi app. Skip the cleanup if
+    the list is empty, which rather points at a problem than at a network
+    without units.
+    """
+    if not api.casa.units:
+        return
+
+    live = _live_identifiers(api)
+    device_registry = dr.async_get(hass)
+    for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id):
+        if not device.identifiers & live:
+            _LOGGER.debug("Removing stale device %s", device.name)
+            device_registry.async_remove_device(device.id)
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: CasambiConfigEntry) -> bool:
@@ -123,6 +154,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: CasambiConfigEntry) -> 
         shutil.rmtree(cache_dir, ignore_errors=True)
 
     await hass.async_add_executor_job(_remove_cache)
+    ir.async_delete_issue(hass, DOMAIN, f"no_connectable_scanner_{entry.entry_id}")
 
 
 async def async_remove_config_entry_device(
@@ -131,10 +163,7 @@ async def async_remove_config_entry_device(
     device_entry: DeviceEntry,
 ) -> bool:
     """Allow removing a device that is no longer part of this Casambi network."""
-    api = config_entry.runtime_data
-    live = {(DOMAIN, api.casa.networkId)}
-    live |= {(DOMAIN, unit.uuid) for unit in api.casa.units}
-    return not (device_entry.identifiers & live)
+    return not device_entry.identifiers & _live_identifiers(config_entry.runtime_data)
 
 
 def get_cache_dir(hass: HomeAssistant) -> Path:
@@ -178,8 +207,31 @@ class CasambiApi:
             bluetooth.BluetoothScanningMode.PASSIVE,
         )
 
+    @property
+    def _scanner_issue_id(self) -> str:
+        return f"no_connectable_scanner_{self.conf_entry.entry_id}"
+
     async def connect(self) -> None:
         """Connect initially to the Casmabi network."""
+        if bluetooth.async_scanner_count(self.hass, connectable=True) < 1:
+            # The user has to add an adapter or an active proxy; retrying
+            # alone can't fix this, so tell them in the repairs dashboard.
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                self._scanner_issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key="no_connectable_scanner",
+                translation_placeholders={"address": self.address},
+            )
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key="network_not_found",
+                translation_placeholders={"address": self.address},
+            )
+        ir.async_delete_issue(self.hass, DOMAIN, self._scanner_issue_id)
+
         try:
             device = bluetooth.async_ble_device_from_address(
                 self.hass, self.address, connectable=True

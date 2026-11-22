@@ -1,0 +1,9 @@
+{
+  "entity": {
+    "number": {
+      "vertical": {
+        "default": "mdi:arrow-up-down"
+      }
+    }
+  }
+}
