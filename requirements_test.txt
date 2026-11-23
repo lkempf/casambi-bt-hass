@@ -1,0 +1,13 @@
+pytest
+pytest-asyncio
+pytest-homeassistant-custom-component
+casambi-bt==0.4.0b5
+# Needed to import homeassistant.components.usb / bluetooth on all platforms.
+pyserial
+aiousbwatcher
+serialx
+# Needed by the bluetooth integration for BlueZ history.
+dbus-fast
+# Time zone database; required on Windows for hass.config.set_time_zone.
+tzdata
+ruff

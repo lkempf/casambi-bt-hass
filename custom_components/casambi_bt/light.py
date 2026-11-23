@@ -74,7 +74,7 @@ class CasambiLight(CasambiEntity, LightEntity, metaclass=ABCMeta):
         # Effects and transitions aren't supported
         self._attr_supported_features = LightEntityFeature(0)
 
-        self._attr_color_mode = self._mode_helper(self.supported_color_modes)
+        self._default_color_mode = self._mode_helper(self.supported_color_modes)
 
         self._obj: Group | Unit
         super().__init__(api, description, obj)
@@ -118,6 +118,26 @@ class CasambiLight(CasambiEntity, LightEntity, metaclass=ABCMeta):
                 return ColorMode.ONOFF
         return ColorMode.UNKNOWN
 
+    def _color_mode_for(self, state: UnitState | None) -> ColorMode:
+        """Return the color mode matching the active color source of a state.
+
+        Lights with several color controls report the control that is
+        currently driving the output through the color source. Fall back to
+        the default mode if the source is unknown or not supported.
+        """
+        modes = self.supported_color_modes or set()
+        source = state.colorsource if state is not None else None
+        if source is ColorSource.TEMPERATURE and ColorMode.COLOR_TEMP in modes:
+            return ColorMode.COLOR_TEMP
+        if source is ColorSource.XY and ColorMode.XY in modes:
+            return ColorMode.XY
+        if source is ColorSource.RGB:
+            if ColorMode.RGBW in modes:
+                return ColorMode.RGBW
+            if ColorMode.RGB in modes:
+                return ColorMode.RGB
+        return self._default_color_mode
+
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the entity of."""
         await self._api.casa.turnOff(self._obj)
@@ -144,6 +164,11 @@ class CasambiLightUnit(CasambiLight, CasambiUnitEntity):
     def is_on(self) -> bool:
         """Return True if the unit is on."""
         return self._obj.is_on
+
+    @property
+    def color_mode(self) -> ColorMode:
+        """Return the color mode of the unit."""
+        return self._color_mode_for(cast("Unit", self._obj).state)
 
     @property
     def brightness(self) -> int | None:
@@ -253,6 +278,14 @@ class CasambiLightGroup(CasambiLight, CasambiNetworkGroup):
         return any(u.is_on for u in self._unit_map.values())
 
     @property
+    def color_mode(self) -> ColorMode:
+        """Return the color mode of the first unit with a known color source."""
+        for unit in self._unit_map.values():
+            if unit.state is not None and unit.state.colorsource is not None:
+                return self._color_mode_for(unit.state)
+        return self._default_color_mode
+
+    @property
     def brightness(self) -> int | None:
         """Return the brightness of the first fitting unit of the group."""
         for unit in self._unit_map.values():
@@ -282,8 +315,10 @@ class CasambiLightGroup(CasambiLight, CasambiNetworkGroup):
                 unit.unitType.get_control(UnitControlType.RGB)
                 and unit.unitType.get_control(UnitControlType.WHITE)
                 and unit.state is not None
+                and unit.state.rgb is not None
+                and unit.state.white is not None
             ):
-                return (*unit.state.rgb, unit.state.white)  # type: ignore[misc]
+                return (*unit.state.rgb, unit.state.white)
         return None
 
     @property
