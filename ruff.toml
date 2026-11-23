@@ -139,6 +139,10 @@ ignore = [
 fixture-parentheses = false
 mark-parentheses = false
 
+[lint.per-file-ignores]
+# Test modules share fixtures and helpers via the tests package.
+"tests/*" = ["TID251"]
+
 [lint.flake8-tidy-imports.banned-api]
 "async_timeout".msg = "use asyncio.timeout instead"
 "pytz".msg = "use zoneinfo instead"

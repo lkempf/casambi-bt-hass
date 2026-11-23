@@ -12,10 +12,32 @@ All changes on `main` and `dev` must conform to the coding standards used for th
 
 ```bash
 ruff check .
-black . --check
+ruff format --check .
 ```
 
-For `casambi-bt` also run `mypy .`. All of these tools should be available when following the recommended setup procedure.
+For this integration and for `casambi-bt` also run `mypy` (`mypy custom_components/casambi_bt` here, `mypy .` in casambi-bt). All of these tools should be available when following the recommended setup procedure.
+
+## Running the tests
+
+Unit tests live in `tests/` and use [pytest-homeassistant-custom-component](https://github.com/MatthewFlamm/pytest-homeassistant-custom-component). To run them locally:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # on Windows: .venv\Scripts\activate
+pip install -r requirements_test.txt
+pytest tests/
+```
+
+CI runs the same checks and requires a test coverage of at least 95 percent:
+
+```bash
+pytest tests/ --cov=custom_components/casambi_bt --cov-report=term-missing --cov-fail-under=95
+mypy custom_components/casambi_bt
+ruff check .
+ruff format --check .
+```
+
+Most tests replace the library with a test double (`tests/conftest.py`). Contract tests such as `tests/test_password_verification.py` run the real `casambi-bt` against a fake Casambi cloud instead; only the bluetooth connection is replaced. Keep them passing when changing how the integration uses the library.
 
 ## Development setup
 

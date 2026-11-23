@@ -1,35 +1,203 @@
 {
-    "config": {
-        "abort": {
-            "already_configured": "Netzwerk ist schon konfiguriert.",
-            "bluetooth_error": "Bluetooth scheint nicht richtig zu funktionieren.",
-            "cannot_connect": "Verbindung fehlgeschlagen",
-            "invalid_address": "Die Bluetooth MAC Adresse des Netzwerks ist ungültig.",
-            "invalid_auth": "Anmeldung ungültig",
-            "reauth_successful": "Neuanmeldung war erfolgreich",
-            "unknown": "Unerwarteter Fehler"
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "bluetooth_confirm": {
+        "title": "{name} einrichten",
+        "description": "Ein Casambi Netzwerk wurde gefunden. Gib sein Passwort ein, um es einzurichten.",
+        "data": {
+          "password": "Passwort",
+          "import_groups": "Gruppen importieren"
         },
-        "error": {
-            "cannot_connect": "Verbindung fehlgeschlagen",
-            "invalid_auth": "Anmeldung ungültig",
-            "unknown": "Unerwarteter Fehler"
-        },
-        "step": {
-            "user": {
-                "data": {
-                    "address": "Bluetooth MAC Adresse",
-                    "import_groups": "Gruppen importieren",
-                    "password": "Passwort"
-                },
-                "title": "Casambi Netzwerk einrichten",
-                "description": "Die Bluetooth MAC Adresse (Netzwerk ID) findest du in den Details deiner Lampen in der Casambi App."
-            },
-            "reauth_confirm": {
-                "data": {
-                    "password": "Passwort"
-                },
-                "title": "Bitte bestätige dein Netzwerk Passwort."
-            }
+        "data_description": {
+          "password": "Passwort des Casambi Netzwerks, nicht deines Casambi Kontos.",
+          "import_groups": "Licht-Entitäten für die Gruppen des Netzwerks erstellen."
         }
+      },
+      "reauth_confirm": {
+        "title": "{name} neu anmelden",
+        "description": "Das Passwort des Casambi Netzwerks {name} wurde abgelehnt. Gib das aktuelle Netzwerkpasswort ein.",
+        "data": {
+          "password": "Passwort"
+        },
+        "data_description": {
+          "password": "Passwort des Casambi Netzwerks, nicht deines Casambi Kontos."
+        }
+      },
+      "cloud": {
+        "title": "Casambi Netzwerk einrichten",
+        "description": "Die Bluetooth MAC Adresse (Netzwerk ID) findest du in den Leuchtendetails der Casambi App.",
+        "data": {
+          "address": "Bluetooth MAC Adresse",
+          "password": "Passwort",
+          "import_groups": "Gruppen importieren"
+        },
+        "data_description": {
+          "address": "Bluetooth MAC Adresse des Casambi Netzwerks, z. B. AA:BB:CC:DD:EE:FF.",
+          "password": "Passwort des Casambi Netzwerks, nicht deines Casambi Kontos.",
+          "import_groups": "Licht- und Zahl-Entitäten für die Gruppen des Netzwerks erstellen."
+        }
+      },
+      "user": {
+        "title": "Casambi Netzwerk einrichten",
+        "description": "Wähle, woher die Konfiguration des Netzwerks kommt.",
+        "menu_options": {
+          "cloud": "Casambi Cloud (Passwort des Netzwerks)",
+          "backup": "Offline-Backup (ohne Cloud)"
+        }
+      },
+      "backup": {
+        "title": "Aus Offline-Backup einrichten",
+        "description": "Füge ein Offline-Backup ein, das mit der Aktion \"Offline-Backup exportieren\" erstellt wurde. Das Netzwerk wird ohne die Casambi Cloud eingerichtet. Das Backup enthält die Schlüssel des Netzwerks; es wird wie die übrigen Daten der Integration gespeichert.",
+        "data": {
+          "backup": "Offline-Backup",
+          "offline_mode": "Offline-Modus",
+          "password": "Passwort",
+          "import_groups": "Gruppen importieren"
+        },
+        "data_description": {
+          "backup": "Der vollständige JSON-Text des Backups.",
+          "offline_mode": "Die Casambi Cloud nie kontaktieren. Das Netzwerk läuft aus der zwischengespeicherten Konfiguration; Änderungen aus der Casambi App brauchen ein neues Offline-Backup.",
+          "password": "Ohne Offline-Modus erforderlich, um Änderungen am Netzwerk aus der Casambi Cloud zu übernehmen.",
+          "import_groups": "Licht- und Zahl-Entitäten für die Gruppen des Netzwerks erstellen."
+        }
+      },
+      "reconfigure_password": {
+        "title": "Passwort von {name} ändern",
+        "description": "Gib das neue Passwort des Casambi Netzwerks {name} ein.",
+        "data": {
+          "password": "Passwort"
+        },
+        "data_description": {
+          "password": "Passwort des Casambi Netzwerks, nicht deines Casambi Kontos."
+        }
+      },
+      "reconfigure": {
+        "title": "{name} neu konfigurieren",
+        "description": "Wähle, was geändert werden soll.",
+        "menu_options": {
+          "reconfigure_password": "Passwort ändern",
+          "restore_backup": "Offline-Backup wiederherstellen"
+        }
+      },
+      "restore_backup": {
+        "title": "Offline-Backup von {name} wiederherstellen",
+        "description": "Stellt die Konfiguration des Netzwerks wieder her, z. B. wenn sie verloren ging und die Casambi Cloud nicht nutzbar ist. Die Integration wird danach neu geladen.",
+        "data": {
+          "backup": "Offline-Backup"
+        },
+        "data_description": {
+          "backup": "Der vollständige JSON-Text des Backups."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung fehlgeschlagen",
+      "invalid_address": "Die Bluetooth MAC Adresse des Netzwerks ist ungültig.",
+      "invalid_auth": "Anmeldung ungültig",
+      "unknown": "Unerwarteter Fehler",
+      "rate_limited": "Die Casambi Cloud lehnt neue Anmeldungen vorübergehend ab. Warte einige Minuten und versuche es erneut.",
+      "cloud_unreachable": "Die Casambi Cloud ist nicht erreichbar, daher kann das Passwort nicht geprüft werden. Prüfe die Internetverbindung und versuche es erneut.",
+      "invalid_backup": "Das ist kein gültiges Offline-Backup.",
+      "wrong_network": "Das Backup gehört zu einem anderen Netzwerk.",
+      "password_required": "Ohne Offline-Modus wird das Passwort des Netzwerks benötigt."
+    },
+    "abort": {
+      "already_configured": "Netzwerk ist bereits konfiguriert",
+      "bluetooth_error": "Kein verbindungsfähiger Bluetooth Adapter oder Proxy verfügbar. Richte zuerst Bluetooth in Home Assistant ein.",
+      "not_supported": "Das gefundene Gerät akzeptiert keine Verbindungen.",
+      "reauth_successful": "Neuanmeldung war erfolgreich",
+      "reconfigure_successful": "Neukonfiguration war erfolgreich"
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Optionen des Casambi Netzwerks",
+        "data": {
+          "import_groups": "Gruppen importieren",
+          "offline_mode": "Offline-Modus"
+        },
+        "data_description": {
+          "import_groups": "Licht- und Zahl-Entitäten für die Gruppen des Netzwerks erstellen. Die Integration wird nach einer Änderung neu geladen.",
+          "offline_mode": "Die Casambi Cloud nie kontaktieren. Das Netzwerk läuft aus der zwischengespeicherten Konfiguration; Änderungen aus der Casambi App brauchen ein neues Offline-Backup."
+        }
+      }
+    },
+    "error": {
+      "password_required": "Für dieses Netzwerk ist kein Passwort gespeichert. Trage es unter Neu konfigurieren -> Passwort ändern ein, bevor du den Offline-Modus ausschaltest."
+    }
+  },
+  "exceptions": {
+    "network_not_found": {
+      "message": "Das Casambi Netzwerk {address} wurde nicht gefunden. Stelle sicher, dass ein Bluetooth Adapter oder Proxy in Reichweite ist."
+    },
+    "bluetooth_error": {
+      "message": "Die Bluetooth Kommunikation mit dem Casambi Netzwerk {address} ist fehlgeschlagen."
+    },
+    "auth_failed": {
+      "message": "Die Anmeldung am Casambi Netzwerk {address} ist fehlgeschlagen."
+    },
+    "unexpected_error": {
+      "message": "Unerwarteter Fehler beim Verbinden mit dem Casambi Netzwerk {address}."
+    },
+    "write_failed": {
+      "message": "Der Befehl konnte nicht an das Casambi Netzwerk gesendet werden."
+    },
+    "rate_limited": {
+      "message": "Die Casambi Cloud lehnt neue Anmeldungen für das Netzwerk {address} vorübergehend ab."
+    },
+    "invalid_address": {
+      "message": "Die gespeicherte Bluetooth Adresse {address} ist ungültig. Entferne das Netzwerk und füge es erneut hinzu."
+    },
+    "invalid_value": {
+      "message": "Der Wert wird von der Casambi Leuchte nicht unterstützt."
+    },
+    "cloud_unavailable": {
+      "message": "Die Casambi Cloud ist nicht nutzbar und das Netzwerk {address} ist noch nicht zwischengespeichert. Prüfe die Internetverbindung."
+    },
+    "unsupported_protocol": {
+      "message": "Die Protokollversion des Casambi Netzwerks {address} wird von dieser Integration nicht unterstützt."
+    },
+    "backup_failed": {
+      "message": "Das Offline-Backup konnte nicht erstellt werden."
+    },
+    "offline_cache_missing": {
+      "message": "Das Casambi Netzwerk {address} ist im Offline-Modus, aber seine Konfiguration ist nicht zwischengespeichert. Stelle ein Offline-Backup wieder her."
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "status": {
+        "name": "Status"
+      }
+    },
+    "number": {
+      "vertical": {
+        "name": "Vertikal"
+      }
+    }
+  },
+  "issues": {
+    "no_connectable_scanner": {
+      "title": "Kein Bluetooth Adapter für Casambi",
+      "description": "Das Casambi Netzwerk {address} ist nicht erreichbar, weil Home Assistant keinen verbindungsfähigen Bluetooth Adapter oder Proxy hat. Füge einen lokalen Bluetooth Adapter oder einen aktiven Bluetooth Proxy hinzu. Die Integration verbindet sich automatisch, sobald einer verfügbar ist."
+    },
+    "offline_cache_missing": {
+      "title": "Offline-Backup für {name} benötigt",
+      "description": "Das Casambi Netzwerk {name} ist im Offline-Modus, aber seine Konfiguration fehlt. Stelle auf der Seite der Integration unter Neu konfigurieren -> Offline-Backup wiederherstellen ein Backup wieder her, oder schalte den Offline-Modus aus, um sie aus der Casambi Cloud zu laden."
+    }
+  },
+  "services": {
+    "export_offline_backup": {
+      "name": "Offline-Backup exportieren",
+      "description": "Liefert alles, um ein Casambi Netzwerk ohne die Casambi Cloud zu nutzen, inklusive der Schlüssel des Netzwerks. Bewahre die Antwort wie ein Passwort auf, z. B. in deinem Passwort-Manager.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Netzwerk",
+          "description": "Das Casambi Netzwerk, das exportiert werden soll."
+        }
+      }
+    }
+  }
 }

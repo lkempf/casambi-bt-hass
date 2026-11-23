@@ -1,23 +1,18 @@
 """Support for the vertical control of Casambi compatible lights."""
 
 from abc import ABCMeta
+from dataclasses import dataclass
 import logging
-from typing import cast
 
 from CasambiBt import Group, Unit, UnitControlType
 
-from homeassistant.components.number import (
-    NumberDeviceClass,
-    NumberEntity,
-    NumberEntityDescription,
-)
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.components.number import NumberEntity, NumberEntityDescription
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from . import CasambiApi
-from .const import CONF_IMPORT_GROUPS, DOMAIN
-from .entities import (
+from . import CasambiApi, CasambiConfigEntry
+from .const import CONF_IMPORT_GROUPS
+from .entity import (
     CasambiEntity,
     CasambiNetworkGroup,
     CasambiUnitEntity,
@@ -26,14 +21,18 @@ from .entities import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# Commands share one bluetooth connection which the library already
+# serializes, so don't add another limit on top.
+PARALLEL_UPDATES = 0
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    config_entry: CasambiConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Create the Casambi vertical entity."""
-    casa_api: CasambiApi = hass.data[DOMAIN][config_entry.entry_id]
+    casa_api = config_entry.runtime_data
 
     light_entities: list[CasambiVerticalNumber] = [
         CasambiVerticalNumberUnit(casa_api, u)
@@ -41,7 +40,7 @@ async def async_setup_entry(
     ]
 
     group_entities: list[CasambiVerticalNumber] = []
-    if config_entry.data[CONF_IMPORT_GROUPS]:
+    if config_entry.options.get(CONF_IMPORT_GROUPS, True):
         for g in casa_api.get_groups():
             has_vert = False
             for u in g.units:
@@ -54,6 +53,7 @@ async def async_setup_entry(
     async_add_entities(light_entities + group_entities)
 
 
+@dataclass(frozen=True, kw_only=True)
 class TypedNumberEntityDescription(TypedEntityDescription, NumberEntityDescription):
     """Describes a CasambiVerticalNumberUnit."""
 
@@ -72,7 +72,6 @@ class CasambiVerticalNumber(CasambiEntity, NumberEntity, metaclass=ABCMeta):
     ) -> None:
         """Initialize a Casambi vertical entity base class."""
 
-        self._attr_device_class = NumberDeviceClass.ILLUMINANCE
         self._attr_native_min_value = 0
         self._attr_native_max_value = 255
 
@@ -81,7 +80,7 @@ class CasambiVerticalNumber(CasambiEntity, NumberEntity, metaclass=ABCMeta):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the vertical value."""
-        await self._api.casa.setVertical(self._obj, int(value))
+        await self._api.async_send(self._api.casa.setVertical, self._obj, int(value))
 
 
 class CasambiVerticalNumberUnit(CasambiVerticalNumber, CasambiUnitEntity):
@@ -90,7 +89,9 @@ class CasambiVerticalNumberUnit(CasambiVerticalNumber, CasambiUnitEntity):
     def __init__(self, api: CasambiApi, unit: Unit) -> None:
         """Initialize a Casambi vertical entity."""
 
-        desc = TypedNumberEntityDescription(key=unit.uuid, entity_type="vertical")
+        desc = TypedNumberEntityDescription(
+            key=unit.uuid, translation_key="vertical", entity_type="vertical"
+        )
 
         self._obj: Unit
         super().__init__(api, desc, unit)
@@ -98,7 +99,7 @@ class CasambiVerticalNumberUnit(CasambiVerticalNumber, CasambiUnitEntity):
     @property
     def native_value(self) -> float | None:
         """Get the vertical value of the unit."""
-        unit = cast("Unit", self._obj)
+        unit = self._obj
         if unit.state is not None and unit.state.vertical is not None:
             return float(unit.state.vertical)
         return None
@@ -110,6 +111,8 @@ class CasambiVerticalNumberGroup(CasambiVerticalNumber, CasambiNetworkGroup):
     def __init__(self, api: CasambiApi, group: Group) -> None:
         """Initialize a Casambi vertical group entity."""
 
+        # The group name is user defined, so no translation key here: it
+        # would take precedence over the name.
         desc = TypedNumberEntityDescription(
             key=str(group.groudId), name=group.name, entity_type="vertical"
         )
@@ -120,7 +123,7 @@ class CasambiVerticalNumberGroup(CasambiVerticalNumber, CasambiNetworkGroup):
     @property
     def native_value(self) -> float | None:
         """Get the average vertical value of the group."""
-        group = cast("Group", self._obj)
+        group = self._obj
         values = [
             float(unit.state.vertical)
             for unit in group.units
