@@ -7,40 +7,37 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorEntityDescription,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from . import DOMAIN, CasambiApi
-from .entities import CasambiNetworkEntity
+from . import CasambiApi, CasambiConfigEntry
+from .entity import CasambiNetworkEntity
 
 _LOGGER = logging.getLogger(__name__)
+
+# The status sensor is push based and never polls.
+PARALLEL_UPDATES = 0
 
 
 NETWORK_SENSORS: tuple[BinarySensorEntityDescription, ...] = (
     BinarySensorEntityDescription(
         key="status",
-        name="Status",
+        translation_key="status",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
 )
 
 
-async def async_unload_entry(_hass: HomeAssistant, _entry: ConfigEntry) -> bool:
-    """Support unloading of entry."""
-    return True
-
-
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    config_entry: CasambiConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up binary sensor."""
     _LOGGER.debug("Setting up binary sensor entities. config_entry: %s", config_entry)
-    api: CasambiApi = hass.data[DOMAIN][config_entry.entry_id]
+    api = config_entry.runtime_data
     binary_sensors = []
 
     # create network sensors

@@ -1,0 +1,175 @@
+"""Common functionality for entities."""
+
+from abc import ABCMeta
+from dataclasses import dataclass
+import logging
+from typing import Final, cast
+
+from CasambiBt import Group as CasambiGroup, Scene as CasambiScene, Unit as CasambiUnit
+
+from homeassistant.core import callback
+from homeassistant.helpers import device_registry
+from homeassistant.helpers.entity import DeviceInfo, Entity, EntityDescription
+
+from . import DOMAIN, CasambiApi
+
+_LOGGER: Final = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, kw_only=True)
+class TypedEntityDescription(EntityDescription):
+    """Describes a CasambiUnitEntity."""
+
+    entity_type: str | None = None
+
+
+class CasambiEntity(Entity, metaclass=ABCMeta):
+    """Placeholder class for storing a Casambi object."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(
+        self,
+        api: CasambiApi,
+        description: EntityDescription,
+        obj: CasambiUnit | CasambiGroup | CasambiScene | None,
+    ):
+        """Initialize Casambi Entity."""
+        self._api = api
+        self._obj = obj
+
+        self.entity_description = description
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self._api.available
+
+    @callback
+    def _change_callback(self, unit: CasambiUnit) -> None:
+        # casambi-bt updates its own unit objects in place and passes them
+        # to the callback. Entities hold references to the same objects, so
+        # only the state needs to be written.
+        _LOGGER.debug("Handling state change for unit %i", unit.deviceId)
+        self.async_write_ha_state()
+
+
+class CasambiNetworkEntity(CasambiEntity, metaclass=ABCMeta):
+    """Defines a Casambi Entity belonging to the network device."""
+
+    def __init__(
+        self,
+        api: CasambiApi,
+        description: EntityDescription | TypedEntityDescription,
+        obj: CasambiGroup | CasambiScene | None = None,
+    ):
+        """Initialize Casambi Entity."""
+        super().__init__(api, description, obj)
+
+        unique_id = f"{api.casa.networkId}"
+        if isinstance(obj, CasambiScene):
+            unique_id += "-scene"
+        elif isinstance(obj, CasambiGroup):
+            unique_id += "-group"
+        self._attr_unique_id = f"{unique_id}-{description.key}"
+        self._attr_device_info = DeviceInfo(
+            name=api.casa.networkName,
+            manufacturer="Casambi",
+            model="Network",
+            identifiers={(DOMAIN, api.casa.networkId)},
+            connections={(device_registry.CONNECTION_BLUETOOTH, api.address)},
+        )
+
+    async def async_added_to_hass(self) -> None:
+        """Follow the connection state of the network."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            self._api.register_connection_updates(self._connection_callback)
+        )
+
+    @callback
+    def _connection_callback(self) -> None:
+        self.async_write_ha_state()
+
+
+class CasambiNetworkGroup(CasambiNetworkEntity, metaclass=ABCMeta):
+    """Base entity for Casambi groups."""
+
+    def __init__(
+        self,
+        api: CasambiApi,
+        description: TypedEntityDescription,
+        obj: CasambiGroup,
+    ):
+        """Initialize Casambi Entity."""
+        super().__init__(api, description, obj)
+
+        self._unit_map = dict(
+            zip([u.deviceId for u in obj.units], obj.units, strict=True)
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return true if any of the units in the group is available."""
+        return super().available and any(
+            unit.online for unit in self._unit_map.values()
+        )
+
+    @callback
+    def _change_callback(self, unit: CasambiUnit) -> None:
+        # Keep the reference current in case the library ever passes a new
+        # object for a unit.
+        self._unit_map[unit.deviceId] = unit
+        super()._change_callback(unit)
+
+    async def async_added_to_hass(self) -> None:
+        """Run when the group is about to be added to hass."""
+        await super().async_added_to_hass()
+        group = cast("CasambiGroup", self._obj)
+        for unit in group.units:
+            self.async_on_remove(
+                self._api.register_unit_updates(unit, self._change_callback)
+            )
+
+
+class CasambiUnitEntity(CasambiEntity, metaclass=ABCMeta):
+    """Base entity for Casambi units."""
+
+    def __init__(
+        self, api: CasambiApi, description: TypedEntityDescription, obj: CasambiUnit
+    ) -> None:
+        """Initialize Casambi Entity."""
+        super().__init__(api, description, obj)
+
+        self._attr_unique_id = (
+            f"{api.casa.networkId}-unit-{obj.uuid}-{description.entity_type}"
+        )
+        # The network device is registered before the platforms are set up,
+        # so it can be resolved here.
+        self._attr_device_info = DeviceInfo(
+            name=obj.name,
+            manufacturer=obj.unitType.manufacturer,
+            model=obj.unitType.model,
+            sw_version=obj.firmwareVersion,
+            identifiers={(DOMAIN, obj.uuid)},
+            via_device_id=device_registry.async_get_device_id_by_identifier(
+                api.hass,
+                (DOMAIN, api.casa.networkId),
+                config_entry_id=api.conf_entry.entry_id,
+            ),
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return True if the unit is available."""
+        unit = cast("CasambiUnit", self._obj)
+        return super().available and unit.online
+
+    async def async_added_to_hass(self) -> None:
+        """Run when the unit is about to be added to hass."""
+        await super().async_added_to_hass()
+        unit = cast("CasambiUnit", self._obj)
+        self.async_on_remove(
+            self._api.register_unit_updates(unit, self._change_callback)
+        )

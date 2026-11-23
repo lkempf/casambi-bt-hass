@@ -1,35 +1,125 @@
 {
-    "config": {
-        "abort": {
-            "already_configured": "Device is already configured",
-            "bluetooth_error": "Bluetooth doesn't seem to work properly.",
-            "cannot_connect": "Failed to connect",
-            "invalid_auth": "Invalid authentication",
-            "reauth_successful": "Re-authentication was successful",
-            "unknown": "Unexpected error"
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "user": {
+        "title": "Set up your Casambi network",
+        "description": "Find the bluetooth MAC address (network ID) in the luminaire details of your Casambi app.",
+        "data": {
+          "address": "Bluetooth MAC address",
+          "password": "Password",
+          "import_groups": "Import groups"
         },
-        "error": {
-            "cannot_connect": "Failed to connect",
-            "invalid_address": "The bluetooth MAC address of the network is invalid.",
-            "invalid_auth": "Invalid authentication",
-            "unknown": "Unexpected error"
-        },
-        "step": {
-            "user": {
-                "data": {
-                    "address": "Bluetooth MAC address",
-                    "import_groups": "Import groups",
-                    "password": "Password"
-                },
-                "title": "Configure your Casambi network",
-                "description": "Find the bluetooth MAC address (Network ID) in the luminair details of your casambi app."
-            },
-            "reauth_confirm": {
-                "data": {
-                    "password": "Password"
-                },
-                "title": "Please verify your network password."
-            }
+        "data_description": {
+          "address": "Bluetooth MAC address of the Casambi network, e.g. AA:BB:CC:DD:EE:FF.",
+          "password": "Password of the Casambi network, not of your Casambi account.",
+          "import_groups": "Create light and number entities for the groups of the network."
         }
+      },
+      "bluetooth_confirm": {
+        "title": "Set up {name}",
+        "description": "A Casambi network was discovered. Enter its password to set it up.",
+        "data": {
+          "password": "Password",
+          "import_groups": "Import groups"
+        },
+        "data_description": {
+          "password": "Password of the Casambi network, not of your Casambi account.",
+          "import_groups": "Create light entities for the groups of the network."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate {name}",
+        "description": "The password of the Casambi network {name} was rejected. Enter the current network password.",
+        "data": {
+          "password": "Password"
+        },
+        "data_description": {
+          "password": "Password of the Casambi network, not of your Casambi account."
+        }
+      },
+      "reconfigure": {
+        "title": "Change the password of {name}",
+        "description": "Enter the new password of the Casambi network {name}.",
+        "data": {
+          "password": "Password"
+        },
+        "data_description": {
+          "password": "Password of the Casambi network, not of your Casambi account."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "invalid_address": "The bluetooth MAC address of the network is invalid.",
+      "invalid_auth": "Invalid authentication",
+      "unknown": "Unexpected error",
+      "rate_limited": "The Casambi cloud temporarily refuses new logins. Wait a few minutes and try again.",
+      "cloud_unreachable": "The Casambi cloud is not reachable, so the password can't be verified. Check the internet connection and try again."
+    },
+    "abort": {
+      "already_configured": "Device is already configured",
+      "bluetooth_error": "No connectable bluetooth adapter or proxy is available. Set up bluetooth in Home Assistant first.",
+      "not_supported": "The discovered device does not accept connections.",
+      "reauth_successful": "Re-authentication was successful",
+      "reconfigure_successful": "Re-configuration was successful"
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Casambi network options",
+        "data": {
+          "import_groups": "Import groups"
+        },
+        "data_description": {
+          "import_groups": "Create light and number entities for the groups of the network. The integration reloads after a change."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "network_not_found": {
+      "message": "The Casambi network {address} was not found. Make sure a bluetooth adapter or proxy is in range."
+    },
+    "bluetooth_error": {
+      "message": "Bluetooth communication with the Casambi network {address} failed."
+    },
+    "auth_failed": {
+      "message": "Authentication to the Casambi network {address} failed."
+    },
+    "unexpected_error": {
+      "message": "Unexpected error while connecting to the Casambi network {address}."
+    },
+    "write_failed": {
+      "message": "Sending the command to the Casambi network failed."
+    },
+    "rate_limited": {
+      "message": "The Casambi cloud temporarily refuses new logins for the network {address}."
+    },
+    "invalid_address": {
+      "message": "The stored bluetooth address {address} is invalid. Remove the network and add it again."
+    },
+    "invalid_value": {
+      "message": "The value is not supported by the Casambi light."
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "status": {
+        "name": "Status"
+      }
+    },
+    "number": {
+      "vertical": {
+        "name": "Vertical"
+      }
+    }
+  },
+  "issues": {
+    "no_connectable_scanner": {
+      "title": "No bluetooth adapter for Casambi",
+      "description": "The Casambi network {address} can't be reached because Home Assistant has no bluetooth adapter or proxy that supports connections. Add a local bluetooth adapter or an active bluetooth proxy. The integration connects automatically once one is available."
+    }
+  }
 }
