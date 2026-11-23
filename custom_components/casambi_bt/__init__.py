@@ -478,6 +478,7 @@ class CasambiApi:
             # Most failures here are transient (cloud hiccups, a network
             # update in progress, flaky bluetooth proxies). Retrying keeps
             # the entry alive instead of failing it until a manual reload.
+            _LOGGER.debug("Unexpected error while connecting", exc_info=True)
             raise ConfigEntryNotReady(
                 translation_domain=DOMAIN,
                 translation_key="unexpected_error",
