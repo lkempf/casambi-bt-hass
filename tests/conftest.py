@@ -113,6 +113,10 @@ class MockCasambi:
         self.disconnect = AsyncMock(side_effect=self._disconnect)
         self.reconnect = AsyncMock(side_effect=self._reconnect)
         self.invalidateCache = AsyncMock()
+        self.refreshNetwork = AsyncMock(return_value=False)
+        self.networkRevision = 1
+        self.exportOfflineBackup = AsyncMock(return_value={"format": "test"})
+        self.importOfflineBackup = AsyncMock(return_value="AA:BB:CC:DD:EE:FF")
 
         # Commands of the library, all of them coroutines.
         for command in (
@@ -129,7 +133,7 @@ class MockCasambi:
         ):
             setattr(self, command, AsyncMock())
 
-    async def _connect(self, _device, _password, _forceOffline=False) -> None:
+    async def _connect(self, _device, _password, **_kwargs) -> None:
         self.connected = True
 
     async def _disconnect(self) -> None:

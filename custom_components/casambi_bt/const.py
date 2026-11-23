@@ -1,5 +1,6 @@
 """Constants for the Casambi Bluetooth integration."""
 
+from datetime import timedelta
 from typing import Final
 
 from homeassistant.const import Platform
@@ -22,3 +23,7 @@ CONNECT_TIMEOUT: Final = 90
 # Upper bound for a command, including the retries and the single reconnect
 # casambi-bt attempts on a broken connection.
 COMMAND_TIMEOUT: Final = 45
+
+# How often the Casambi cloud is checked for a changed network configuration.
+# The network runs from the cached configuration in between.
+NETWORK_REFRESH_INTERVAL: Final = timedelta(hours=24)

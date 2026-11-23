@@ -3,6 +3,7 @@
 import asyncio
 from collections.abc import Awaitable, Callable, Iterable
 import contextlib
+from datetime import datetime
 import logging
 from pathlib import Path
 import random
@@ -10,6 +11,7 @@ import re
 import shutil
 from typing import Any, Final
 
+from bleak.backends.device import BLEDevice
 from CasambiBt import Casambi, Group, Scene, Unit, UnitControlType
 from CasambiBt.errors import (
     AuthenticationError,
@@ -17,7 +19,9 @@ from CasambiBt.errors import (
     BluetoothError,
     CasambiBtError,
     CloudUnavailableError,
+    ConnectionStateError,
     NetworkOnlineUpdateNeededError,
+    NetworkUpdateError,
     ProtocolError,
     UnsupportedProtocolVersion,
 )
@@ -35,6 +39,7 @@ from homeassistant.exceptions import (
 )
 from homeassistant.helpers import device_registry as dr, issue_registry as ir
 from homeassistant.helpers.device_registry import DeviceEntry
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.httpx_client import get_async_client
 
 from .const import (
@@ -42,6 +47,7 @@ from .const import (
     CONF_IMPORT_GROUPS,
     CONNECT_TIMEOUT,
     DOMAIN,
+    NETWORK_REFRESH_INTERVAL,
     PLATFORMS,
     RECONNECT_BACKOFF_MAX,
     RECONNECT_BACKOFF_START,
@@ -106,6 +112,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: CasambiConfigEntry) -> b
         # Otherwise the bluetooth callback and a live connection would leak.
         await api.disconnect()
         raise
+
+    # The network started from the cached configuration. Check the cloud
+    # for changes now and then regularly; it is optional for operation.
+    entry.async_create_background_task(
+        hass,
+        api.async_refresh_network(),
+        "casambi_bt network refresh",
+        eager_start=False,
+    )
+    entry.async_on_unload(
+        async_track_time_interval(
+            hass,
+            api.async_refresh_network,
+            NETWORK_REFRESH_INTERVAL,
+            name="casambi_bt network refresh",
+        )
+    )
 
     return True
 
@@ -275,6 +298,7 @@ class CasambiApi:
         # attempted until the entry is reloaded (e.g. by a successful
         # reauth), otherwise every advertisement would trigger a login.
         self._auth_failed = False
+        self._refreshing = False
 
     def _register_bluetooth_callback(self) -> None:
         self._cancel_bluetooth_callback = bluetooth.async_register_callback(
@@ -283,6 +307,57 @@ class CasambiApi:
             {"address": self.address, "connectable": True},
             bluetooth.BluetoothScanningMode.PASSIVE,
         )
+
+    @callback
+    def _current_ble_device(self) -> BLEDevice | None:
+        """Return the current device, e.g. after a bluetooth proxy took over."""
+        return bluetooth.async_ble_device_from_address(
+            self.hass, self.address, connectable=True
+        )
+
+    async def async_refresh_network(self, _now: datetime | None = None) -> None:
+        """Check the Casambi cloud for a changed network configuration.
+
+        The network runs from the cached configuration. A newer one is
+        downloaded into the cache and the entry is reloaded to apply it,
+        which adds new units and removes deleted ones. Without the cloud the
+        cached configuration simply stays in use.
+        """
+        if self._refreshing or self._auth_failed:
+            return
+        self._refreshing = True
+        try:
+            changed = await self.casa.refreshNetwork(self.password)
+        except AuthenticationError as err:
+            if credentials_rejected(err):
+                # The network keeps working with the cached configuration,
+                # but the password must be updated to get changes.
+                _LOGGER.warning(
+                    "The Casambi cloud rejected the password of network %s",
+                    self.address,
+                )
+                self.conf_entry.async_start_reauth(self.hass)
+            else:
+                _LOGGER.debug("Network refresh not authenticated.", exc_info=True)
+            return
+        except CloudUnavailableError, NetworkUpdateError, ConnectionStateError:
+            _LOGGER.debug(
+                "Casambi cloud not available, using the cached configuration.",
+                exc_info=True,
+            )
+            return
+        except Exception:
+            _LOGGER.exception("Unexpected error while refreshing the network")
+            return
+        finally:
+            self._refreshing = False
+
+        if changed:
+            _LOGGER.info(
+                "The configuration of Casambi network %s changed, reloading",
+                self.address,
+            )
+            self.hass.config_entries.async_schedule_reload(self.conf_entry.entry_id)
 
     @property
     def _scanner_issue_id(self) -> str:
@@ -321,7 +396,15 @@ class CasambiApi:
 
             try:
                 await asyncio.wait_for(
-                    self.casa.connect(device, self.password), CONNECT_TIMEOUT
+                    self.casa.connect(
+                        device,
+                        self.password,
+                        # Start from the cached configuration, the cloud is
+                        # checked in the background by async_refresh_network.
+                        preferCache=True,
+                        bleDeviceCallback=self._current_ble_device,
+                    ),
+                    CONNECT_TIMEOUT,
                 )
             except TimeoutError as err:
                 raise BluetoothError(

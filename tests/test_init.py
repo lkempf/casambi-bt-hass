@@ -161,6 +161,9 @@ async def test_failed_unload_keeps_connection(
     mock_casambi.disconnect.assert_not_awaited()
     assert mock_casambi.connected
 
+    # The entry stays active, so its timer does too. Clean up for the test.
+    await config_entry._async_process_on_unload(hass)  # noqa: SLF001
+
 
 async def test_network_device_registered_before_platforms(
     hass: HomeAssistant,
