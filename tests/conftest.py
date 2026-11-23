@@ -9,7 +9,11 @@ from CasambiBt import Unit, UnitControl, UnitControlType, UnitState, UnitType
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.casambi_bt.const import CONF_IMPORT_GROUPS, DOMAIN
+from custom_components.casambi_bt.const import (
+    CONF_IMPORT_GROUPS,
+    CONF_OFFLINE_MODE,
+    DOMAIN,
+)
 from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 
@@ -192,9 +196,10 @@ def config_entry() -> MockConfigEntry:
         domain=DOMAIN,
         title="Test Network",
         data={CONF_ADDRESS: TEST_ADDRESS, CONF_PASSWORD: "secret-password"},
-        options={CONF_IMPORT_GROUPS: False},
+        options={CONF_IMPORT_GROUPS: False, CONF_OFFLINE_MODE: False},
         unique_id=TEST_ADDRESS,
         version=2,
+        minor_version=2,
     )
 
 
@@ -256,7 +261,8 @@ def group_config_entry(config_entry: MockConfigEntry) -> MockConfigEntry:
         domain=DOMAIN,
         title=config_entry.title,
         data=config_entry.data,
-        options={CONF_IMPORT_GROUPS: True},
+        options={CONF_IMPORT_GROUPS: True, CONF_OFFLINE_MODE: False},
         unique_id=config_entry.unique_id,
         version=2,
+        minor_version=2,
     )

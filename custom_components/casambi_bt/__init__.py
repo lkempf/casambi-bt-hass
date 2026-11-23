@@ -50,6 +50,7 @@ from homeassistant.helpers.typing import ConfigType
 from .const import (
     COMMAND_TIMEOUT,
     CONF_IMPORT_GROUPS,
+    CONF_OFFLINE_MODE,
     CONNECT_TIMEOUT,
     DOMAIN,
     NETWORK_REFRESH_INTERVAL,
@@ -128,6 +129,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: CasambiConfigEntry) -> b
         await api.disconnect()
         raise
 
+    if api.offline:
+        return True
+
     # The network started from the cached configuration. Check the cloud
     # for changes now and then regularly; it is optional for operation.
     entry.async_create_background_task(
@@ -196,6 +200,20 @@ async def async_migrate_entry(hass: HomeAssistant, entry: CasambiConfigEntry) ->
         )
         _LOGGER.debug("Migrated config entry %s to version 2", entry.entry_id)
 
+    if entry.version == 2 and entry.minor_version < 2:
+        # 2.2 added the offline mode. Entries without a password were set up
+        # from an offline backup and can't use the cloud, so they keep
+        # running offline instead of asking for a password every day.
+        hass.config_entries.async_update_entry(
+            entry,
+            options={
+                **entry.options,
+                CONF_OFFLINE_MODE: not entry.data.get(CONF_PASSWORD),
+            },
+            minor_version=2,
+        )
+        _LOGGER.debug("Migrated config entry %s to version 2.2", entry.entry_id)
+
     return True
 
 
@@ -214,6 +232,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: CasambiConfigEntry) -> 
 async def async_remove_entry(hass: HomeAssistant, entry: CasambiConfigEntry) -> None:
     """Clean up persistent data when the config entry is deleted."""
     ir.async_delete_issue(hass, DOMAIN, f"no_connectable_scanner_{entry.entry_id}")
+    ir.async_delete_issue(hass, DOMAIN, f"offline_cache_missing_{entry.entry_id}")
     try:
         uuid = cache_uuid(entry.data[CONF_ADDRESS])
     except ValueError:
@@ -300,6 +319,7 @@ class CasambiApi:
         self.conf_entry = conf_entry
         self.address = address
         self.password = password
+        self.offline: bool = conf_entry.options.get(CONF_OFFLINE_MODE, False)
         self.casa = Casambi(get_async_client(hass), get_cache_dir(hass))
 
         self._callback_map: dict[int, list[Callable[[Unit], None]]] = {}
@@ -338,7 +358,7 @@ class CasambiApi:
         which adds new units and removes deleted ones. Without the cloud the
         cached configuration simply stays in use.
         """
-        if self._refreshing or self._auth_failed:
+        if self.offline or self._refreshing or self._auth_failed:
             return
         self._refreshing = True
         try:
@@ -378,6 +398,10 @@ class CasambiApi:
     def _scanner_issue_id(self) -> str:
         return f"no_connectable_scanner_{self.conf_entry.entry_id}"
 
+    @property
+    def _cache_issue_id(self) -> str:
+        return f"offline_cache_missing_{self.conf_entry.entry_id}"
+
     async def connect(self) -> None:
         """Connect initially to the Casmabi network."""
         if bluetooth.async_scanner_count(self.hass, connectable=True) < 1:
@@ -414,6 +438,8 @@ class CasambiApi:
                     self.casa.connect(
                         device,
                         self.password,
+                        # The offline mode never contacts the cloud.
+                        forceOffline=self.offline,
                         # Start from the cached configuration, the cloud is
                         # checked in the background by async_refresh_network.
                         preferCache=True,
@@ -426,6 +452,7 @@ class CasambiApi:
                     f"Connection attempt to {self.address} timed out"
                 ) from err
             self._link_up = True
+            ir.async_delete_issue(self.hass, DOMAIN, self._cache_issue_id)
         except BluetoothError as err:
             raise ConfigEntryNotReady(
                 translation_domain=DOMAIN,
@@ -462,6 +489,23 @@ class CasambiApi:
                 translation_placeholders={"address": self.address},
             ) from err
         except NetworkOnlineUpdateNeededError as err:
+            if self.offline:
+                # Nothing to start from and the cloud must not be used. Only
+                # restoring an offline backup helps, so don't retry forever.
+                ir.async_create_issue(
+                    self.hass,
+                    DOMAIN,
+                    self._cache_issue_id,
+                    is_fixable=False,
+                    severity=ir.IssueSeverity.ERROR,
+                    translation_key="offline_cache_missing",
+                    translation_placeholders={"name": self.conf_entry.title},
+                )
+                raise ConfigEntryError(
+                    translation_domain=DOMAIN,
+                    translation_key="offline_cache_missing",
+                    translation_placeholders={"address": self.address},
+                ) from err
             raise ConfigEntryNotReady(
                 translation_domain=DOMAIN,
                 translation_key="cloud_unavailable",

@@ -11,6 +11,9 @@ PLATFORMS = [Platform.BINARY_SENSOR, Platform.LIGHT, Platform.SCENE, Platform.NU
 
 CONF_IMPORT_GROUPS: Final = "import_groups"
 CONF_BACKUP: Final = "backup"
+# Never contact the Casambi cloud: the network only runs from its cache,
+# e.g. one restored from an offline backup.
+CONF_OFFLINE_MODE: Final = "offline_mode"
 
 RECONNECT_BACKOFF_START: Final = 2
 RECONNECT_BACKOFF_STEP: Final = 2

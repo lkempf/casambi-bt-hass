@@ -38,6 +38,7 @@ The network is discovered automatically when a bluetooth adapter or proxy that s
 | Bluetooth MAC address | Address of the Casambi network, e.g. `AA:BB:CC:DD:EE:FF`. It is shown as network ID in the luminaire details of the Casambi app. Not asked for discovered networks. |
 | Password | Password of the Casambi network (not of your Casambi account). |
 | Import groups | Create entities for the groups of the network. Can be changed later under *Configure*; the integration reloads afterwards. |
+| Offline mode | Never contact the Casambi cloud (option under *Configure*, and asked when restoring an offline backup). The network runs from its cached configuration and needs no password; changes made in the Casambi app need a new offline backup. Without the offline mode the password is required and the cloud is checked for changes. |
 
 The password can be changed with *Reconfigure* on the integration page. If the network rejects the stored password, Home Assistant asks for the new one (re-authentication). Both check the password with the Casambi cloud, so they need an internet connection. If the cloud temporarily refuses new logins, wait a few minutes and try again.
 
@@ -96,7 +97,7 @@ To be safe even if the cache is lost while the cloud is gone (e.g. a new Home As
 
 To restore it:
 
-- On a new installation, add the integration and choose *Offline backup*. Paste the backup. The password is optional; it is only needed to get changes from the Casambi cloud later.
+- On a new installation, add the integration and choose *Offline backup*. Paste the backup. The *offline mode* is preselected: the network then never contacts the Casambi cloud and needs no password. Turn it off and enter the password to get changes from the Casambi cloud.
 - For a configured network, use *Reconfigure -> Restore an offline backup* on the integration page.
 
 A backup stays valid as long as the network isn't changed in the Casambi app. Export a new one after changes.
@@ -113,6 +114,8 @@ A backup stays valid as long as the network isn't changed in the Casambi app. Ex
 - **Failed to connect / network not found**: make sure the network is in range of an adapter or proxy and configured as described under *Network configuration*.
 - **Invalid authentication**: use *Reconfigure* or the re-authentication prompt to enter the current network password. The network keeps working from its cached configuration meanwhile.
 - **Network isn't cached and the cloud can't be used**: the first start needs the Casambi cloud or an offline backup. Restore a backup with *Reconfigure -> Restore an offline backup*.
+- **"Offline backup needed" repair issue**: the network is in offline mode but its cached configuration is missing. Restore a backup with *Reconfigure -> Restore an offline backup*, or turn the offline mode off under *Configure*.
+- **Asked for the password although you want to stay offline**: turn on the *offline mode* under *Configure*.
 - **Cloud refuses logins / password can't be verified**: the Casambi cloud limits new logins. The integration keeps retrying on its own; for the setup dialogs wait a few minutes and check the internet connection.
 - **Diagnostics**: download them from the integration page; passwords and addresses are redacted.
 - For anything else enable the debug log as described under *Reporting issues*.

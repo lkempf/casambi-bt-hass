@@ -51,12 +51,14 @@
         "description": "Paste an offline backup created with the action \"Export offline backup\". The network is set up without the Casambi cloud. The backup contains the keys of the network; it is stored like the other data of the integration.",
         "data": {
           "backup": "Offline backup",
+          "offline_mode": "Offline mode",
           "password": "[%key:common::config_flow::data::password%]",
           "import_groups": "Import groups"
         },
         "data_description": {
           "backup": "The complete JSON text of the backup.",
-          "password": "Optional. Needed to get changes of the network from the Casambi cloud later.",
+          "offline_mode": "Never contact the Casambi cloud. The network runs from its cached configuration; changes made in the Casambi app need a new offline backup.",
+          "password": "Required without the offline mode, to get changes of the network from the Casambi cloud.",
           "import_groups": "Create light and number entities for the groups of the network."
         }
       },
@@ -97,7 +99,8 @@
       "rate_limited": "The Casambi cloud temporarily refuses new logins. Wait a few minutes and try again.",
       "cloud_unreachable": "The Casambi cloud is not reachable, so the password can't be verified. Check the internet connection and try again.",
       "invalid_backup": "This isn't a valid offline backup.",
-      "wrong_network": "The backup belongs to another network."
+      "wrong_network": "The backup belongs to another network.",
+      "password_required": "The password of the network is required without the offline mode."
     },
     "abort": {
       "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
@@ -112,12 +115,17 @@
       "init": {
         "title": "Casambi network options",
         "data": {
-          "import_groups": "Import groups"
+          "import_groups": "Import groups",
+          "offline_mode": "Offline mode"
         },
         "data_description": {
-          "import_groups": "Create light and number entities for the groups of the network. The integration reloads after a change."
+          "import_groups": "Create light and number entities for the groups of the network. The integration reloads after a change.",
+          "offline_mode": "Never contact the Casambi cloud. The network runs from its cached configuration; changes made in the Casambi app need a new offline backup."
         }
       }
+    },
+    "error": {
+      "password_required": "No password is stored for this network. Set it with Reconfigure -> Change the password before turning the offline mode off."
     }
   },
   "exceptions": {
@@ -153,6 +161,9 @@
     },
     "backup_failed": {
       "message": "The offline backup couldn't be created."
+    },
+    "offline_cache_missing": {
+      "message": "The Casambi network {address} is in offline mode but its configuration isn't cached. Restore an offline backup."
     }
   },
   "entity": {
@@ -171,6 +182,10 @@
     "no_connectable_scanner": {
       "title": "No bluetooth adapter for Casambi",
       "description": "The Casambi network {address} can't be reached because Home Assistant has no bluetooth adapter or proxy that supports connections. Add a local bluetooth adapter or an active bluetooth proxy. The integration connects automatically once one is available."
+    },
+    "offline_cache_missing": {
+      "title": "Offline backup needed for {name}",
+      "description": "The Casambi network {name} is in offline mode, but its configuration is missing. Restore an offline backup with Reconfigure -> Restore an offline backup on the integration page, or turn the offline mode off to load it from the Casambi cloud."
     }
   },
   "services": {

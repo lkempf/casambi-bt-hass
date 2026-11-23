@@ -51,12 +51,14 @@
         "description": "Füge ein Offline-Backup ein, das mit der Aktion \"Offline-Backup exportieren\" erstellt wurde. Das Netzwerk wird ohne die Casambi Cloud eingerichtet. Das Backup enthält die Schlüssel des Netzwerks; es wird wie die übrigen Daten der Integration gespeichert.",
         "data": {
           "backup": "Offline-Backup",
+          "offline_mode": "Offline-Modus",
           "password": "Passwort",
           "import_groups": "Gruppen importieren"
         },
         "data_description": {
           "backup": "Der vollständige JSON-Text des Backups.",
-          "password": "Optional. Wird benötigt, um später Änderungen am Netzwerk aus der Casambi Cloud zu übernehmen.",
+          "offline_mode": "Die Casambi Cloud nie kontaktieren. Das Netzwerk läuft aus der zwischengespeicherten Konfiguration; Änderungen aus der Casambi App brauchen ein neues Offline-Backup.",
+          "password": "Ohne Offline-Modus erforderlich, um Änderungen am Netzwerk aus der Casambi Cloud zu übernehmen.",
           "import_groups": "Licht- und Zahl-Entitäten für die Gruppen des Netzwerks erstellen."
         }
       },
@@ -97,7 +99,8 @@
       "rate_limited": "Die Casambi Cloud lehnt neue Anmeldungen vorübergehend ab. Warte einige Minuten und versuche es erneut.",
       "cloud_unreachable": "Die Casambi Cloud ist nicht erreichbar, daher kann das Passwort nicht geprüft werden. Prüfe die Internetverbindung und versuche es erneut.",
       "invalid_backup": "Das ist kein gültiges Offline-Backup.",
-      "wrong_network": "Das Backup gehört zu einem anderen Netzwerk."
+      "wrong_network": "Das Backup gehört zu einem anderen Netzwerk.",
+      "password_required": "Ohne Offline-Modus wird das Passwort des Netzwerks benötigt."
     },
     "abort": {
       "already_configured": "Netzwerk ist bereits konfiguriert",
@@ -112,12 +115,17 @@
       "init": {
         "title": "Optionen des Casambi Netzwerks",
         "data": {
-          "import_groups": "Gruppen importieren"
+          "import_groups": "Gruppen importieren",
+          "offline_mode": "Offline-Modus"
         },
         "data_description": {
-          "import_groups": "Licht- und Zahl-Entitäten für die Gruppen des Netzwerks erstellen. Die Integration wird nach einer Änderung neu geladen."
+          "import_groups": "Licht- und Zahl-Entitäten für die Gruppen des Netzwerks erstellen. Die Integration wird nach einer Änderung neu geladen.",
+          "offline_mode": "Die Casambi Cloud nie kontaktieren. Das Netzwerk läuft aus der zwischengespeicherten Konfiguration; Änderungen aus der Casambi App brauchen ein neues Offline-Backup."
         }
       }
+    },
+    "error": {
+      "password_required": "Für dieses Netzwerk ist kein Passwort gespeichert. Trage es unter Neu konfigurieren -> Passwort ändern ein, bevor du den Offline-Modus ausschaltest."
     }
   },
   "exceptions": {
@@ -153,6 +161,9 @@
     },
     "backup_failed": {
       "message": "Das Offline-Backup konnte nicht erstellt werden."
+    },
+    "offline_cache_missing": {
+      "message": "Das Casambi Netzwerk {address} ist im Offline-Modus, aber seine Konfiguration ist nicht zwischengespeichert. Stelle ein Offline-Backup wieder her."
     }
   },
   "entity": {
@@ -171,6 +182,10 @@
     "no_connectable_scanner": {
       "title": "Kein Bluetooth Adapter für Casambi",
       "description": "Das Casambi Netzwerk {address} ist nicht erreichbar, weil Home Assistant keinen verbindungsfähigen Bluetooth Adapter oder Proxy hat. Füge einen lokalen Bluetooth Adapter oder einen aktiven Bluetooth Proxy hinzu. Die Integration verbindet sich automatisch, sobald einer verfügbar ist."
+    },
+    "offline_cache_missing": {
+      "title": "Offline-Backup für {name} benötigt",
+      "description": "Das Casambi Netzwerk {name} ist im Offline-Modus, aber seine Konfiguration fehlt. Stelle auf der Seite der Integration unter Neu konfigurieren -> Offline-Backup wiederherstellen ein Backup wieder her, oder schalte den Offline-Modus aus, um sie aus der Casambi Cloud zu laden."
     }
   },
   "services": {

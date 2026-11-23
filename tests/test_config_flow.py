@@ -15,7 +15,11 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.casambi_bt.config_flow import _validate_input
-from custom_components.casambi_bt.const import CONF_IMPORT_GROUPS, DOMAIN
+from custom_components.casambi_bt.const import (
+    CONF_IMPORT_GROUPS,
+    CONF_OFFLINE_MODE,
+    DOMAIN,
+)
 from homeassistant.config_entries import (
     SOURCE_BLUETOOTH,
     SOURCE_USER,
@@ -128,7 +132,7 @@ async def test_user_flow(hass: HomeAssistant) -> None:
         CONF_ADDRESS: TEST_ADDRESS,
         CONF_PASSWORD: "secret-password",
     }
-    assert result["options"] == {CONF_IMPORT_GROUPS: True}
+    assert result["options"] == {CONF_IMPORT_GROUPS: True, CONF_OFFLINE_MODE: False}
     assert result["result"].unique_id == TEST_ADDRESS
 
 
@@ -250,7 +254,7 @@ async def test_bluetooth_discovery(hass: HomeAssistant) -> None:
         CONF_ADDRESS: TEST_ADDRESS,
         CONF_PASSWORD: "secret-password",
     }
-    assert result["options"] == {CONF_IMPORT_GROUPS: False}
+    assert result["options"] == {CONF_IMPORT_GROUPS: False, CONF_OFFLINE_MODE: False}
     assert result["result"].unique_id == TEST_ADDRESS
 
 
@@ -364,7 +368,7 @@ async def test_options_flow_reloads(
     await hass.async_block_till_done()
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert config_entry.options == {CONF_IMPORT_GROUPS: True}
+    assert config_entry.options == {CONF_IMPORT_GROUPS: True, CONF_OFFLINE_MODE: False}
     assert config_entry.state is ConfigEntryState.LOADED
     assert mock_casambi.connect.await_count == 2
 
@@ -514,7 +518,8 @@ async def test_backup_flow(hass: HomeAssistant, mock_casambi: MockCasambi) -> No
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["title"] == "Test Network"
     assert result["data"] == {CONF_ADDRESS: TEST_ADDRESS, CONF_PASSWORD: ""}
-    assert result["options"] == {CONF_IMPORT_GROUPS: False}
+    # Restoring a backup defaults to the offline mode.
+    assert result["options"] == {CONF_IMPORT_GROUPS: False, CONF_OFFLINE_MODE: True}
     assert result["result"].unique_id == TEST_ADDRESS
     mock_casambi.importOfflineBackup.assert_awaited_with(BACKUP)
     assert mock_casambi.connect.await_args.kwargs["preferCache"] is True
@@ -625,3 +630,79 @@ async def test_restore_backup(
     assert result["reason"] == "reconfigure_successful"
     assert config_entry.state is ConfigEntryState.LOADED
     assert config_entry.data[CONF_PASSWORD] == "secret-password"
+
+
+@pytest.mark.usefixtures("mock_bluetooth", "mock_setup_entry")
+async def test_backup_flow_online_needs_password(
+    hass: HomeAssistant, mock_casambi: MockCasambi
+) -> None:
+    """Without the offline mode the cloud must accept the password."""
+    result = await _start_backup_flow(hass)
+    backup_input = {
+        "backup": json.dumps(BACKUP),
+        CONF_OFFLINE_MODE: False,
+        CONF_IMPORT_GROUPS: True,
+    }
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], backup_input
+    )
+    assert result["errors"] == {CONF_PASSWORD: "password_required"}
+    mock_casambi.importOfflineBackup.assert_not_awaited()
+
+    # The backup restores, but the cloud rejects the password.
+    mock_casambi.connect = AsyncMock(
+        side_effect=[
+            None,
+            AuthenticationError("Login failed: 401", status_code=401),
+            None,
+            None,
+        ]
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**backup_input, CONF_PASSWORD: "wrong"}
+    )
+    assert result["errors"] == {"base": "invalid_auth"}
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**backup_input, CONF_PASSWORD: "secret-password"}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_PASSWORD] == "secret-password"
+    assert result["options"] == {CONF_IMPORT_GROUPS: True, CONF_OFFLINE_MODE: False}
+    # The password was checked with a fresh cloud login.
+    assert mock_casambi.connect.await_count == 4
+
+
+@pytest.mark.usefixtures("mock_bluetooth")
+async def test_options_offline_mode_needs_password_to_go_online(
+    hass: HomeAssistant, mock_casambi: MockCasambi
+) -> None:
+    """An entry without a password can't leave the offline mode."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Test Network",
+        data={CONF_ADDRESS: TEST_ADDRESS, CONF_PASSWORD: ""},
+        options={CONF_IMPORT_GROUPS: True, CONF_OFFLINE_MODE: True},
+        unique_id=TEST_ADDRESS,
+        version=2,
+        minor_version=2,
+    )
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_IMPORT_GROUPS: True, CONF_OFFLINE_MODE: False}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "password_required"}
+
+    # Other options can still be changed while offline.
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_IMPORT_GROUPS: False, CONF_OFFLINE_MODE: True}
+    )
+    await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options == {CONF_IMPORT_GROUPS: False, CONF_OFFLINE_MODE: True}

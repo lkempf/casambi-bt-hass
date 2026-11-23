@@ -51,12 +51,14 @@
         "description": "Plak een offline back-up die met de actie \"Offline back-up exporteren\" is gemaakt. Het netwerk wordt zonder de Casambi cloud ingesteld. De back-up bevat de sleutels van het netwerk; hij wordt opgeslagen zoals de andere gegevens van de integratie.",
         "data": {
           "backup": "Offline back-up",
+          "offline_mode": "Offline modus",
           "password": "Wachtwoord",
           "import_groups": "Groepen importeren"
         },
         "data_description": {
           "backup": "De volledige JSON-tekst van de back-up.",
-          "password": "Optioneel. Nodig om later wijzigingen van het netwerk uit de Casambi cloud over te nemen.",
+          "offline_mode": "Nooit contact opnemen met de Casambi cloud. Het netwerk draait vanuit de opgeslagen configuratie; wijzigingen in de Casambi app vereisen een nieuwe offline back-up.",
+          "password": "Vereist zonder offline modus, om wijzigingen van het netwerk uit de Casambi cloud over te nemen.",
           "import_groups": "Licht- en nummerentiteiten aanmaken voor de groepen van het netwerk."
         }
       },
@@ -97,7 +99,8 @@
       "rate_limited": "De Casambi cloud weigert tijdelijk nieuwe aanmeldingen. Wacht een paar minuten en probeer het opnieuw.",
       "cloud_unreachable": "De Casambi cloud is niet bereikbaar, daardoor kan het wachtwoord niet worden gecontroleerd. Controleer de internetverbinding en probeer het opnieuw.",
       "invalid_backup": "Dit is geen geldige offline back-up.",
-      "wrong_network": "De back-up hoort bij een ander netwerk."
+      "wrong_network": "De back-up hoort bij een ander netwerk.",
+      "password_required": "Zonder offline modus is het wachtwoord van het netwerk vereist."
     },
     "abort": {
       "already_configured": "Apparaat is al geconfigureerd",
@@ -112,12 +115,17 @@
       "init": {
         "title": "Opties van het Casambi netwerk",
         "data": {
-          "import_groups": "Groepen importeren"
+          "import_groups": "Groepen importeren",
+          "offline_mode": "Offline modus"
         },
         "data_description": {
-          "import_groups": "Licht- en nummerentiteiten aanmaken voor de groepen van het netwerk. De integratie wordt na een wijziging opnieuw geladen."
+          "import_groups": "Licht- en nummerentiteiten aanmaken voor de groepen van het netwerk. De integratie wordt na een wijziging opnieuw geladen.",
+          "offline_mode": "Nooit contact opnemen met de Casambi cloud. Het netwerk draait vanuit de opgeslagen configuratie; wijzigingen in de Casambi app vereisen een nieuwe offline back-up."
         }
       }
+    },
+    "error": {
+      "password_required": "Voor dit netwerk is geen wachtwoord opgeslagen. Stel het in via Opnieuw configureren -> Wachtwoord wijzigen voordat je de offline modus uitschakelt."
     }
   },
   "exceptions": {
@@ -153,6 +161,9 @@
     },
     "backup_failed": {
       "message": "De offline back-up kon niet worden gemaakt."
+    },
+    "offline_cache_missing": {
+      "message": "Het Casambi netwerk {address} staat in offline modus, maar de configuratie is niet opgeslagen. Herstel een offline back-up."
     }
   },
   "entity": {
@@ -171,6 +182,10 @@
     "no_connectable_scanner": {
       "title": "Geen bluetooth adapter voor Casambi",
       "description": "Het Casambi netwerk {address} is niet bereikbaar omdat Home Assistant geen bluetooth adapter of proxy heeft die verbindingen ondersteunt. Voeg een lokale bluetooth adapter of een actieve bluetooth proxy toe. De integratie maakt automatisch verbinding zodra er een beschikbaar is."
+    },
+    "offline_cache_missing": {
+      "title": "Offline back-up nodig voor {name}",
+      "description": "Het Casambi netwerk {name} staat in offline modus, maar de configuratie ontbreekt. Herstel een offline back-up via Opnieuw configureren -> Offline back-up herstellen op de pagina van de integratie, of schakel de offline modus uit om hem uit de Casambi cloud te laden."
     }
   },
   "services": {

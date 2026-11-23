@@ -1,5 +1,6 @@
 """Test integration setup and unload."""
 
+from datetime import timedelta
 import importlib
 from unittest.mock import AsyncMock, patch
 
@@ -13,7 +14,10 @@ from CasambiBt.errors import (
     UnsupportedProtocolVersion,
 )
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 
 from custom_components.casambi_bt import (
     async_remove_config_entry_device,
@@ -22,11 +26,16 @@ from custom_components.casambi_bt import (
     credentials_rejected,
     is_rate_limited,
 )
-from custom_components.casambi_bt.const import CONF_IMPORT_GROUPS, DOMAIN
+from custom_components.casambi_bt.const import (
+    CONF_IMPORT_GROUPS,
+    CONF_OFFLINE_MODE,
+    DOMAIN,
+)
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, issue_registry as ir
+from homeassistant.util import dt as dt_util
 
 from .conftest import TEST_ADDRESS, TEST_UUID, MockCasambi, make_state, make_unit
 
@@ -220,9 +229,9 @@ async def test_migrate_entry_v1(
     await hass.async_block_till_done()
 
     assert entry.state is ConfigEntryState.LOADED
-    assert entry.version == 2
+    assert (entry.version, entry.minor_version) == (2, 2)
     assert entry.data == {CONF_ADDRESS: TEST_ADDRESS, CONF_PASSWORD: "secret"}
-    assert entry.options == {CONF_IMPORT_GROUPS: expected}
+    assert entry.options == {CONF_IMPORT_GROUPS: expected, CONF_OFFLINE_MODE: False}
 
 
 @pytest.mark.usefixtures("mock_bluetooth", "mock_casambi", "enable_bluetooth")
@@ -543,3 +552,88 @@ async def test_setup_restricts_cache_permissions(
     restrict.assert_called_once()
     assert restrict.call_args.args[1] == TEST_UUID
     assert config_entry.state is ConfigEntryState.LOADED
+
+
+@pytest.mark.parametrize(("password", "offline"), [("", True), ("secret", False)])
+@pytest.mark.usefixtures("mock_bluetooth", "mock_casambi", "enable_bluetooth")
+async def test_migrate_entry_offline_mode(
+    hass: HomeAssistant, password: str, offline: bool
+) -> None:
+    """Entries restored without a password keep running offline after 2.2.
+
+    Beta11 entries set up from a backup without password asked for the
+    password after every cloud check.
+    """
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_ADDRESS: TEST_ADDRESS, CONF_PASSWORD: password},
+        options={CONF_IMPORT_GROUPS: True},
+        unique_id=TEST_ADDRESS,
+        version=2,
+        minor_version=1,
+    )
+    entry.add_to_hass(hass)
+
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert entry.minor_version == 2
+    assert entry.options == {CONF_IMPORT_GROUPS: True, CONF_OFFLINE_MODE: offline}
+
+
+def _offline_entry() -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        title="Test Network",
+        data={CONF_ADDRESS: TEST_ADDRESS, CONF_PASSWORD: ""},
+        options={CONF_IMPORT_GROUPS: True, CONF_OFFLINE_MODE: True},
+        unique_id=TEST_ADDRESS,
+        version=2,
+        minor_version=2,
+    )
+
+
+@pytest.mark.usefixtures("mock_bluetooth", "enable_bluetooth")
+async def test_offline_mode_never_uses_the_cloud(
+    hass: HomeAssistant, mock_casambi: MockCasambi
+) -> None:
+    """The offline mode connects offline and never refreshes."""
+    entry = _offline_entry()
+    entry.add_to_hass(hass)
+
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(days=2))
+    await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert mock_casambi.connect.await_args.kwargs["forceOffline"] is True
+    mock_casambi.refreshNetwork.assert_not_awaited()
+    await entry.runtime_data.async_refresh_network()
+    mock_casambi.refreshNetwork.assert_not_awaited()
+
+
+@pytest.mark.usefixtures("mock_bluetooth", "enable_bluetooth")
+async def test_offline_mode_without_cache(
+    hass: HomeAssistant, mock_casambi: MockCasambi
+) -> None:
+    """Without a cache the offline mode asks for an offline backup."""
+    entry = _offline_entry()
+    entry.add_to_hass(hass)
+    issue_id = f"offline_cache_missing_{entry.entry_id}"
+    mock_casambi.connect = AsyncMock(
+        side_effect=[NetworkOnlineUpdateNeededError("Network isn't cached."), None]
+    )
+
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.SETUP_ERROR
+    assert "Restore an offline backup" in entry.reason
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
+
+    # After restoring a backup the setup works and the issue is gone.
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.LOADED
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None

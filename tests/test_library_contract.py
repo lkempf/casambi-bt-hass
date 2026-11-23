@@ -18,7 +18,11 @@ import httpx
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.casambi_bt.const import CONF_IMPORT_GROUPS, DOMAIN
+from custom_components.casambi_bt.const import (
+    CONF_IMPORT_GROUPS,
+    CONF_OFFLINE_MODE,
+    DOMAIN,
+)
 from homeassistant.config_entries import SOURCE_USER, ConfigEntryState
 from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
@@ -148,9 +152,10 @@ def entry(hass: HomeAssistant, tmp_path) -> MockConfigEntry:
         domain=DOMAIN,
         title="Home",
         data={CONF_ADDRESS: TEST_ADDRESS, CONF_PASSWORD: PASSWORD},
-        options={CONF_IMPORT_GROUPS: True},
+        options={CONF_IMPORT_GROUPS: True, CONF_OFFLINE_MODE: False},
         unique_id=TEST_ADDRESS,
         version=2,
+        minor_version=2,
     )
     entry.add_to_hass(hass)
     return entry
@@ -275,5 +280,25 @@ async def test_offline_backup_roundtrip(
     restored = result["result"]
     assert restored.state is ConfigEntryState.LOADED
     assert _unit_devices(hass, restored) == ["Lamp 1"]
-    # Nothing but the background refresh touched the (offline) cloud.
-    assert all(path != "/fixture/42" for path in cloud.requests)
+    # Restoring a backup defaults to the offline mode: no cloud access at all.
+    assert cloud.requests == []
+
+
+async def test_offline_mode_never_contacts_the_cloud(
+    hass: HomeAssistant, cloud: FakeCloud, entry: MockConfigEntry
+) -> None:
+    """In offline mode the cloud isn't used even when it is reachable."""
+    await _setup(hass, entry)
+    await hass.config_entries.async_unload(entry.entry_id)
+
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, CONF_OFFLINE_MODE: True}
+    )
+    cloud.requests.clear()
+    cloud.network = _network(revision=2, units=2)
+
+    await _setup(hass, entry)
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert cloud.requests == []
+    assert _unit_devices(hass, entry) == ["Lamp 1"]

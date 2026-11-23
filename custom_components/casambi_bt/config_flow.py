@@ -53,7 +53,7 @@ from . import (
     get_cache_dir,
     is_rate_limited,
 )
-from .const import CONF_BACKUP, CONF_IMPORT_GROUPS, DOMAIN
+from .const import CONF_BACKUP, CONF_IMPORT_GROUPS, CONF_OFFLINE_MODE, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -85,6 +85,7 @@ BACKUP_SELECTOR: Final = TextSelector(TextSelectorConfig(multiline=True))
 BACKUP_SCHEMA: Final = vol.Schema(
     {
         vol.Required(CONF_BACKUP): BACKUP_SELECTOR,
+        vol.Required(CONF_OFFLINE_MODE, default=True): BooleanSelector(),
         vol.Optional(CONF_PASSWORD, default=""): PASSWORD_SELECTOR,
         vol.Required(CONF_IMPORT_GROUPS, default=True): BooleanSelector(),
     }
@@ -93,7 +94,10 @@ BACKUP_SCHEMA: Final = vol.Schema(
 RESTORE_SCHEMA: Final = vol.Schema({vol.Required(CONF_BACKUP): BACKUP_SELECTOR})
 
 OPTIONS_SCHEMA: Final = vol.Schema(
-    {vol.Required(CONF_IMPORT_GROUPS, default=True): BooleanSelector()}
+    {
+        vol.Required(CONF_IMPORT_GROUPS, default=True): BooleanSelector(),
+        vol.Required(CONF_OFFLINE_MODE, default=False): BooleanSelector(),
+    }
 )
 
 
@@ -221,6 +225,7 @@ class CasambiConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Casambi Bluetooth."""
 
     VERSION = 2
+    MINOR_VERSION = 2
 
     def __init__(self) -> None:
         """Initialize the config flow."""
@@ -240,7 +245,10 @@ class CasambiConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_create_entry(
             title=title,
             data={CONF_ADDRESS: address, CONF_PASSWORD: user_input[CONF_PASSWORD]},
-            options={CONF_IMPORT_GROUPS: user_input[CONF_IMPORT_GROUPS]},
+            options={
+                CONF_IMPORT_GROUPS: user_input[CONF_IMPORT_GROUPS],
+                CONF_OFFLINE_MODE: user_input.get(CONF_OFFLINE_MODE, False),
+            },
         )
 
     async def _async_try_connect(
@@ -414,13 +422,24 @@ class CasambiConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._abort_if_unique_id_configured()
 
                 password = user_input.get(CONF_PASSWORD, "")
-                title, errors = await self._async_try(
-                    lambda: _restore_backup(self.hass, backup, password)
-                )
-                if title is not None:
-                    return self._async_create_casa_entry(
-                        title, address, {**user_input, CONF_PASSWORD: password}
+                offline = user_input[CONF_OFFLINE_MODE]
+                if not offline and not password:
+                    # Getting changes from the cloud needs the password.
+                    errors[CONF_PASSWORD] = "password_required"
+                else:
+                    title, errors = await self._async_try(
+                        lambda: _restore_backup(self.hass, backup, password)
                     )
+                    if title is not None and not offline:
+                        # The cloud has to accept the password, otherwise
+                        # the entry would ask for it right after the setup.
+                        _, errors = await self._async_try_connect(
+                            address, password, verify_password=True
+                        )
+                    if title is not None and not errors:
+                        return self._async_create_casa_entry(
+                            title, address, {**user_input, CONF_PASSWORD: password}
+                        )
 
         return self.async_show_form(
             step_id="backup",
@@ -543,12 +562,21 @@ class CasambiOptionsFlow(OptionsFlowWithReload):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Manage the options."""
+        errors: dict[str, str] = {}
         if user_input is not None:
-            return self.async_create_entry(data=user_input)
+            if not user_input[CONF_OFFLINE_MODE] and not self.config_entry.data.get(
+                CONF_PASSWORD
+            ):
+                # The password is part of the entry data and is checked by
+                # the cloud, so it is set with reconfigure, not here.
+                errors["base"] = "password_required"
+            else:
+                return self.async_create_entry(data=user_input)
 
         return self.async_show_form(
             step_id="init",
             data_schema=self.add_suggested_values_to_schema(
-                OPTIONS_SCHEMA, self.config_entry.options
+                OPTIONS_SCHEMA, user_input or self.config_entry.options
             ),
+            errors=errors,
         )
