@@ -31,7 +31,7 @@ Add this repository as custom repository in the HACS store (HACS -> integrations
 
 ## Configuration
 
-The network is discovered automatically when a bluetooth adapter or proxy that supports connections is in range. It can also be added manually under *Settings -> Devices & services -> Add integration -> Casambi Bluetooth*.
+The network is discovered automatically when a bluetooth adapter or proxy that supports connections is in range. It can also be added manually under *Settings -> Devices & services -> Add integration -> Casambi Bluetooth*, either with the Casambi cloud (address and password) or from an offline backup (see *Offline operation and offline backup*).
 
 | Parameter | Description |
 | --- | --- |
@@ -67,6 +67,8 @@ Not supported yet:
 
 The integration keeps a bluetooth connection to the network and receives state changes as they happen (push). No polling is done. If the connection drops, it reconnects automatically with increasing delays and logs the loss and the recovery once at info level. All entities are unavailable while the connection is down.
 
+The configuration of the network (units, groups, scenes and the keys of the network) comes from the Casambi cloud and is cached. Home Assistant starts the network from this cache and checks the cloud in the background right after the start and every 24 hours. When the configuration changed in the Casambi app, the integration reloads by itself: new units appear and deleted ones are removed.
+
 ### Use cases and examples
 
 - Control Casambi luminaires from dashboards, automations and voice assistants together with the rest of your home.
@@ -75,16 +77,42 @@ The integration keeps a bluetooth connection to the network and receives state c
 
 ### Known limitations
 
-- Units and groups that are added in the Casambi app appear after reloading the integration. Units that were deleted are removed on the next start or reload.
+- Units and groups that are added or deleted in the Casambi app are applied within 24 hours (or at the next start) by an automatic reload, which needs the Casambi cloud.
+- The first setup needs the Casambi cloud or an offline backup.
 - Group states are derived from the first unit with a matching control, so mixed groups may show the values of a single unit.
 - Only network configurations described in the casambi-bt documentation are supported (see *Network configuration*).
 - Switches and sensors of the network are not exposed yet.
+
+## Offline operation and offline backup
+
+The bluetooth connection never needs the Casambi cloud. The cloud is only needed to download the configuration of the network, so after the first setup the network keeps working without internet and without the Casambi cloud, also across restarts.
+
+To be safe even if the cache is lost while the cloud is gone (e.g. a new Home Assistant installation), export an **offline backup**:
+
+1. Go to *Developer tools -> Actions* and run the action *Casambi Bluetooth: Export offline backup* (`casambi_bt.export_offline_backup`) for your network. Only administrators can run it.
+2. Copy the complete response and store it in your password manager, e.g. as a secure note or file.
+
+**The backup contains the keys of your network. Treat it like a password.**
+
+To restore it:
+
+- On a new installation, add the integration and choose *Offline backup*. Paste the backup. The password is optional; it is only needed to get changes from the Casambi cloud later.
+- For a configured network, use *Reconfigure -> Restore an offline backup* on the integration page.
+
+A backup stays valid as long as the network isn't changed in the Casambi app. Export a new one after changes.
+
+### Actions
+
+| Action | Description |
+| --- | --- |
+| `casambi_bt.export_offline_backup` | Returns the offline backup of a network (field `config_entry_id`). Administrators only. |
 
 ## Troubleshooting
 
 - **No connectable bluetooth adapter**: a repair issue is shown when Home Assistant has no local adapter or active bluetooth proxy that supports connections. Add one; the integration connects as soon as it is available.
 - **Failed to connect / network not found**: make sure the network is in range of an adapter or proxy and configured as described under *Network configuration*.
-- **Invalid authentication**: use *Reconfigure* or the re-authentication prompt to enter the current network password.
+- **Invalid authentication**: use *Reconfigure* or the re-authentication prompt to enter the current network password. The network keeps working from its cached configuration meanwhile.
+- **Network isn't cached and the cloud can't be used**: the first start needs the Casambi cloud or an offline backup. Restore a backup with *Reconfigure -> Restore an offline backup*.
 - **Cloud refuses logins / password can't be verified**: the Casambi cloud limits new logins. The integration keeps retrying on its own; for the setup dialogs wait a few minutes and check the internet connection.
 - **Diagnostics**: download them from the integration page; passwords and addresses are redacted.
 - For anything else enable the debug log as described under *Reporting issues*.

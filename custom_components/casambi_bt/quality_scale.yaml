@@ -1,8 +1,6 @@
 rules:
   # Bronze
-  action-setup:
-    status: exempt
-    comment: The integration does not register custom actions.
+  action-setup: done
   appropriate-polling:
     status: exempt
     comment: The integration is push based and does not poll.
@@ -15,9 +13,7 @@ rules:
   dependency-transparency:
     status: todo
     comment: casambi-bt has no tagged releases built and published in public CI yet.
-  docs-actions:
-    status: exempt
-    comment: The integration does not register custom actions.
+  docs-actions: done
   docs-conditions:
     status: exempt
     comment: The integration does not provide conditions.
@@ -63,7 +59,7 @@ rules:
   docs-use-cases: done
   dynamic-devices:
     status: todo
-    comment: casambi-bt loads the network configuration on connect and doesn't report changes, so new units only appear after a reload.
+    comment: New units are added automatically within 24 hours, but through a reload of the entry instead of adding them to the running entry.
   entity-category: done
   entity-device-class: done
   entity-disabled-by-default:
