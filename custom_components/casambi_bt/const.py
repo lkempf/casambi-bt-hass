@@ -18,3 +18,7 @@ RECONNECT_BACKOFF_MAX: Final = 300
 # aborted and retried. Generous because establishing a connection through
 # bluetooth proxies can legitimately take a while.
 CONNECT_TIMEOUT: Final = 90
+
+# Upper bound for a command, including the retries and the single reconnect
+# casambi-bt attempts on a broken connection.
+COMMAND_TIMEOUT: Final = 45

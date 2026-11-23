@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from CasambiBt.errors import (
     AuthenticationError,
     BluetoothError,
+    CloudUnavailableError,
     NetworkOnlineUpdateNeededError,
 )
 from habluetooth import BluetoothServiceInfoBleak
@@ -80,7 +81,7 @@ async def test_validate_input_falls_back_to_cloud_login(
     in lower case) which is how the library names its cache directory.
     """
     mock_casambi.connect = AsyncMock(
-        side_effect=[AuthenticationError("Login failed: 401"), None]
+        side_effect=[AuthenticationError("Login failed: 410", status_code=410), None]
     )
 
     title = await _validate_input(hass, TEST_ADDRESS, "secret-password")
@@ -131,8 +132,10 @@ async def test_user_flow_invalid_address(hass: HomeAssistant) -> None:
 @pytest.mark.parametrize(
     ("error", "expected"),
     [
-        (AuthenticationError("Login failed: 401"), "invalid_auth"),
-        (AuthenticationError("Login failed: 403\nlater"), "rate_limited"),
+        (AuthenticationError("Login failed: 401", status_code=401), "invalid_auth"),
+        (CloudUnavailableError("Login failed: 403", 403), "rate_limited"),
+        (CloudUnavailableError("Login failed: 503", 503), "cloud_unreachable"),
+        (AuthenticationError("Not authenticated!"), "cannot_connect"),
         (BluetoothError(), "cannot_connect"),
         (RuntimeError("boom"), "unknown"),
     ],
@@ -250,7 +253,9 @@ async def test_bluetooth_discovery_wrong_password(
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": SOURCE_BLUETOOTH}, data=_discovery_info()
     )
-    mock_casambi.connect = AsyncMock(side_effect=AuthenticationError())
+    mock_casambi.connect = AsyncMock(
+        side_effect=AuthenticationError("Login failed: 401", status_code=401)
+    )
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {CONF_PASSWORD: "wrong", CONF_IMPORT_GROUPS: True},
@@ -305,7 +310,9 @@ async def test_reauth_flow(
 
     # A wrong password keeps the entry running: the forced cloud login of
     # the validation fails, then the entry is set up again with its old data.
-    mock_casambi.connect = AsyncMock(side_effect=[AuthenticationError(), None])
+    mock_casambi.connect = AsyncMock(
+        side_effect=[AuthenticationError("Login failed: 401", status_code=401), None]
+    )
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_PASSWORD: "wrong"}
     )

@@ -102,6 +102,12 @@
     },
     "invalid_value": {
       "message": "De waarde wordt niet ondersteund door de Casambi lamp."
+    },
+    "cloud_unavailable": {
+      "message": "De Casambi cloud is niet bruikbaar en het netwerk {address} is nog niet opgeslagen. Controleer de internetverbinding."
+    },
+    "unsupported_protocol": {
+      "message": "De protocolversie van het Casambi netwerk {address} wordt niet ondersteund door deze integratie."
     }
   },
   "entity": {

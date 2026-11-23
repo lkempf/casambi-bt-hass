@@ -102,6 +102,12 @@
     },
     "invalid_value": {
       "message": "Der Wert wird von der Casambi Leuchte nicht unterstützt."
+    },
+    "cloud_unavailable": {
+      "message": "Die Casambi Cloud ist nicht nutzbar und das Netzwerk {address} ist noch nicht zwischengespeichert. Prüfe die Internetverbindung."
+    },
+    "unsupported_protocol": {
+      "message": "Die Protokollversion des Casambi Netzwerks {address} wird von dieser Integration nicht unterstützt."
     }
   },
   "entity": {

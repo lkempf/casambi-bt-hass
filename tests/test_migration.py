@@ -4,8 +4,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 import pickle
 import stat
+from unittest.mock import patch
 
-from CasambiBt._network import _NetworkSession
+from CasambiBt import CACHE_VERSION
+from CasambiBt._keystore import KEY_CACHE_FILE as LIB_KEY_FILE
+from CasambiBt._network import (
+    SESSION_CACHE_FILE as LIB_SESSION_FILE,
+    TYPES_CACHE_FILE as LIB_TYPES_FILE,
+    _NetworkSession,
+)
 import pytest
 
 from custom_components.casambi_bt.migration import (
@@ -13,6 +20,7 @@ from custom_components.casambi_bt.migration import (
     KEY_CACHE_FILE,
     MIGRATION_MARKER,
     SESSION_CACHE_FILE,
+    TARGET_CACHE_VERSION,
     TYPES_CACHE_FILE,
     migrate_legacy_cache,
     restrict_cache_permissions,
@@ -142,3 +150,30 @@ def test_restrict_cache_permissions(tmp_path: Path) -> None:
 def test_restrict_cache_permissions_missing(tmp_path: Path) -> None:
     """A cache that doesn't exist yet must be ignored."""
     restrict_cache_permissions(tmp_path / "missing", "aabbccddeeff")
+
+
+def test_cache_layout_matches_library() -> None:
+    """The migration hard codes the cache layout of casambi-bt.
+
+    Fails when an upgrade of the library changes it, so the migration is
+    revisited instead of silently corrupting caches.
+    """
+    assert CACHE_VERSION == TARGET_CACHE_VERSION
+    assert (SESSION_CACHE_FILE, TYPES_CACHE_FILE, KEY_CACHE_FILE) == (
+        LIB_SESSION_FILE,
+        LIB_TYPES_FILE,
+        LIB_KEY_FILE,
+    )
+
+
+def test_migration_skipped_for_other_cache_version(tmp_path: Path) -> None:
+    """A library with another cache version must not get a version 4 marker."""
+    entry_dir = tmp_path / TEST_UUID
+    entry_dir.mkdir()
+    (tmp_path / CACHE_VERSION_FILE).write_text("2", encoding="ascii")
+
+    with patch("custom_components.casambi_bt.migration.LIBRARY_CACHE_VERSION", 5):
+        migrate_legacy_cache(tmp_path, TEST_UUID)
+
+    assert (tmp_path / CACHE_VERSION_FILE).read_text(encoding="ascii") == "2"
+    assert not (entry_dir / MIGRATION_MARKER).exists()

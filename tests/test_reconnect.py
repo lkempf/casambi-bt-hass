@@ -153,7 +153,9 @@ async def test_reconnect_auth_error_starts_reauth(
     api = await _setup(hass, config_entry)
 
     mock_casambi.connected = False
-    mock_casambi.reconnect = AsyncMock(side_effect=AuthenticationError())
+    mock_casambi.reconnect = AsyncMock(
+        side_effect=AuthenticationError("rejected", status_code=401)
+    )
 
     api._schedule_reconnect()  # noqa: SLF001
     await drain(hass)
@@ -335,7 +337,7 @@ async def test_reconnect_rate_limited_keeps_retrying(
     mock_casambi: MockCasambi,
     config_entry: MockConfigEntry,
 ) -> None:
-    """A rate limit while reconnecting must back off, not start reauth."""
+    """A transient auth error while reconnecting must back off, not reauth."""
     api = await _setup(hass, config_entry)
 
     attempts = []
@@ -344,7 +346,7 @@ async def test_reconnect_rate_limited_keeps_retrying(
     async def _reconnect(_device):
         attempts.append(_device)
         if len(attempts) == 1:
-            raise AuthenticationError("Login failed: 403")
+            raise AuthenticationError("Not authenticated!")
         mock_casambi.connected = True
 
     async def _sleep(delay: float) -> None:

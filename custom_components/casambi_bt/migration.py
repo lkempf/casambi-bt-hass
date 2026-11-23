@@ -25,6 +25,8 @@ from pathlib import Path
 import pickle
 from typing import Any, Final
 
+from CasambiBt import CACHE_VERSION as LIBRARY_CACHE_VERSION
+
 _LOGGER = logging.getLogger(__name__)
 
 CACHE_VERSION_FILE: Final = ".cachever"
@@ -33,7 +35,8 @@ TYPES_CACHE_FILE: Final = "types.pck"
 KEY_CACHE_FILE: Final = "keys.pck"
 MIGRATION_MARKER: Final = ".migrated-v1"
 
-# Cache version understood by the casambi-bt version this integration pins.
+# Cache version this migration produces. It must match the version of the
+# installed casambi-bt, otherwise the migration is skipped.
 TARGET_CACHE_VERSION: Final = 4
 
 
@@ -56,6 +59,15 @@ def migrate_legacy_cache(cache_root: Path, uuid: str) -> None:
 
     Runs synchronously, call it via an executor job.
     """
+    if LIBRARY_CACHE_VERSION != TARGET_CACHE_VERSION:
+        # The migration writes the format of cache version 4. Marking a
+        # cache with another version would make the library misread it.
+        _LOGGER.debug(
+            "Skipping the cache migration for cache version %i",
+            LIBRARY_CACHE_VERSION,
+        )
+        return
+
     entry_dir = cache_root / uuid
     if not entry_dir.is_dir():
         return

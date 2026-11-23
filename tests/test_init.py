@@ -4,7 +4,14 @@ import importlib
 from unittest.mock import AsyncMock, patch
 
 from CasambiBt import UnitControlType
-from CasambiBt.errors import AuthenticationError, BluetoothError, NetworkUpdateError
+from CasambiBt.errors import (
+    AuthenticationError,
+    BluetoothError,
+    CloudUnavailableError,
+    NetworkOnlineUpdateNeededError,
+    NetworkUpdateError,
+    UnsupportedProtocolVersion,
+)
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -12,8 +19,8 @@ from custom_components.casambi_bt import (
     async_remove_config_entry_device,
     async_remove_entry,
     cache_uuid,
+    credentials_rejected,
     is_rate_limited,
-    login_status,
 )
 from custom_components.casambi_bt.const import CONF_IMPORT_GROUPS, DOMAIN
 from homeassistant.config_entries import ConfigEntryState
@@ -80,7 +87,9 @@ async def test_setup_auth_failed(
     enable_bluetooth: None,
 ) -> None:
     """An authentication error must trigger the reauth flow."""
-    mock_casambi.connect = AsyncMock(side_effect=AuthenticationError())
+    mock_casambi.connect = AsyncMock(
+        side_effect=AuthenticationError("Login failed: 401", status_code=401)
+    )
 
     config_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(config_entry.entry_id)
@@ -376,39 +385,72 @@ async def test_remove_config_entry_device(
     assert await async_remove_config_entry_device(hass, config_entry, live)
 
 
+@pytest.mark.parametrize(
+    ("error", "reason"),
+    [
+        (CloudUnavailableError("Login failed: 403", 403), "refuses new logins"),
+        (CloudUnavailableError("Login failed: 503", 503), "isn't cached yet"),
+        (NetworkOnlineUpdateNeededError("Network isn't cached."), "isn't cached yet"),
+        (AuthenticationError("Not authenticated!"), "Unexpected error"),
+    ],
+)
 @pytest.mark.usefixtures("mock_bluetooth", "enable_bluetooth")
-async def test_setup_rate_limited_retries(
+async def test_setup_cloud_errors_retry(
     hass: HomeAssistant,
     mock_casambi: MockCasambi,
     config_entry: MockConfigEntry,
+    error: Exception,
+    reason: str,
 ) -> None:
-    """A cloud rate limit must retry the setup instead of starting reauth."""
-    mock_casambi.connect = AsyncMock(
-        side_effect=AuthenticationError("Login failed: 403\nToo many sessions")
-    )
+    """Cloud errors must retry the setup instead of starting reauth.
+
+    A cloud outage (503) used to be reported as AuthenticationError and
+    started a reauth flow.
+    """
+    mock_casambi.connect = AsyncMock(side_effect=error)
     config_entry.add_to_hass(hass)
 
     await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
 
     assert config_entry.state is ConfigEntryState.SETUP_RETRY
+    assert reason in config_entry.reason
     assert not hass.config_entries.flow.async_progress()
 
 
+@pytest.mark.usefixtures("mock_bluetooth", "enable_bluetooth")
+async def test_setup_unsupported_protocol_fails(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+) -> None:
+    """An unsupported network can't be fixed by retrying."""
+    mock_casambi.connect = AsyncMock(side_effect=UnsupportedProtocolVersion("v99"))
+    config_entry.add_to_hass(hass)
+
+    await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert config_entry.state is ConfigEntryState.SETUP_ERROR
+    assert "isn't supported" in config_entry.reason
+
+
 @pytest.mark.parametrize(
-    ("message", "status", "limited"),
-    [
-        ("Login failed: 401\nwrong", 401, False),
-        ("Login failed: 403\nlater", 403, True),
-        ("Login failed: 429", 429, True),
-        ("Not authenticated!", None, False),
-    ],
+    ("status", "rejected"), [(401, True), (410, True), (None, False)]
 )
-def test_login_status(message: str, status: int | None, limited: bool) -> None:
-    """The login status is parsed from the library error message."""
-    err = AuthenticationError(message)
-    assert login_status(err) == status
-    assert is_rate_limited(err) is limited
+def test_credentials_rejected(status: int | None, rejected: bool) -> None:
+    """Only a rejected login or a revoked session need new credentials."""
+    assert (
+        credentials_rejected(AuthenticationError("x", status_code=status)) is rejected
+    )
+
+
+@pytest.mark.parametrize(
+    ("status", "limited"), [(403, True), (429, True), (503, False), (None, False)]
+)
+def test_is_rate_limited(status: int | None, limited: bool) -> None:
+    """403 and 429 are rate limits of the cloud."""
+    assert is_rate_limited(CloudUnavailableError("x", status)) is limited
 
 
 @pytest.mark.parametrize(

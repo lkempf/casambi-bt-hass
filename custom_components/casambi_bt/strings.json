@@ -102,6 +102,12 @@
     },
     "invalid_value": {
       "message": "The value is not supported by the Casambi light."
+    },
+    "cloud_unavailable": {
+      "message": "The Casambi cloud can't be used and the network {address} isn't cached yet. Check the internet connection."
+    },
+    "unsupported_protocol": {
+      "message": "The protocol version of the Casambi network {address} isn't supported by this integration."
     }
   },
   "entity": {

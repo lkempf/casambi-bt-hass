@@ -1,6 +1,7 @@
 """Test sending commands to the network."""
 
-from unittest.mock import AsyncMock
+import asyncio
+from unittest.mock import AsyncMock, patch
 
 from CasambiBt._constants import ConnectionState
 from CasambiBt.errors import BluetoothError, ConnectionStateError
@@ -88,3 +89,52 @@ async def test_invalid_value_raises_validation_error(
 
     assert err.value.translation_key == "invalid_value"
     mock_casambi.reconnect.assert_not_awaited()
+
+
+@pytest.mark.usefixtures("mock_bluetooth", "enable_bluetooth")
+async def test_hanging_command_times_out(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+) -> None:
+    """A command that never returns must fail the action and reconnect."""
+    config_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    api: CasambiApi = config_entry.runtime_data
+
+    async def _hang(*_args) -> None:
+        await asyncio.sleep(10)
+
+    mock_casambi.turnOn = AsyncMock(side_effect=_hang)
+    mock_casambi.connected = False
+
+    with (
+        patch("custom_components.casambi_bt.COMMAND_TIMEOUT", 0.05),
+        pytest.raises(HomeAssistantError) as err,
+    ):
+        await api.async_send(api.casa.turnOn, None)
+
+    assert err.value.translation_key == "write_failed"
+    await drain(hass)
+    mock_casambi.reconnect.assert_awaited()
+
+
+@pytest.mark.usefixtures("mock_bluetooth", "enable_bluetooth")
+async def test_unexpected_library_error_fails_action(
+    hass: HomeAssistant,
+    mock_casambi: MockCasambi,
+    config_entry: MockConfigEntry,
+) -> None:
+    """Errors outside the library's error types must not leak unhandled."""
+    config_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    api: CasambiApi = config_entry.runtime_data
+
+    mock_casambi.turnOn = AsyncMock(side_effect=AssertionError("id too large"))
+
+    with pytest.raises(HomeAssistantError) as err:
+        await api.async_send(api.casa.turnOn, None)
+
+    assert err.value.translation_key == "write_failed"

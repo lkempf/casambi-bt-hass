@@ -2,7 +2,7 @@ pytest
 pytest-cov
 pytest-asyncio
 pytest-homeassistant-custom-component
-casambi-bt==0.4.0b5
+casambi-bt==0.5.0b1
 # Needed to import homeassistant.components.usb / bluetooth on all platforms.
 pyserial
 aiousbwatcher

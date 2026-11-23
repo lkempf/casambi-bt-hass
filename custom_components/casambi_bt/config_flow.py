@@ -14,6 +14,7 @@ from CasambiBt import Casambi
 from CasambiBt.errors import (
     AuthenticationError,
     CasambiBtError,
+    CloudUnavailableError,
     NetworkNotFoundError,
     NetworkOnlineUpdateNeededError,
 )
@@ -46,9 +47,9 @@ from . import (
     CasambiConfigEntry,
     async_migrate_cache,
     cache_uuid,
+    credentials_rejected,
     get_cache_dir,
     is_rate_limited,
-    login_status,
 )
 from .const import CONF_IMPORT_GROUPS, DOMAIN
 
@@ -146,14 +147,13 @@ async def _validate_input(
         # while the cloud refuses new sessions.
         return await _async_connect_once(casa, bt_device, password)
     except AuthenticationError as err:
-        if is_rate_limited(err):
+        if not credentials_rejected(err):
             raise
-        # The cached session is missing, expired or rejected. Drop the
-        # cache and retry with a genuine cloud login so a wrong password
-        # is still reported to the user.
+        # The cached session was rejected. Drop the cache and retry with a
+        # genuine cloud login so a wrong password is still reported.
         _LOGGER.info(
             "Login with cached session failed (status %s), retrying fresh",
-            login_status(err),
+            err.status_code,
         )
         await casa.invalidateCache(uuid)
         return await _async_connect_once(
@@ -197,10 +197,15 @@ class CasambiConfigFlow(ConfigFlow, domain=DOMAIN):
                 self.hass, address, password, verify_password=verify_password
             )
         except AuthenticationError as err:
-            # Only log the status: the error also carries the response body
-            # of the cloud.
-            _LOGGER.warning("Casambi login failed with status %s", login_status(err))
-            errors["base"] = "rate_limited" if is_rate_limited(err) else "invalid_auth"
+            _LOGGER.warning("Casambi login failed with status %s", err.status_code)
+            errors["base"] = (
+                "invalid_auth" if credentials_rejected(err) else "cannot_connect"
+            )
+        except CloudUnavailableError as err:
+            _LOGGER.debug("Casambi cloud can't be used", exc_info=True)
+            errors["base"] = (
+                "rate_limited" if is_rate_limited(err) else "cloud_unreachable"
+            )
         except NetworkOnlineUpdateNeededError:
             _LOGGER.debug("Casambi cloud not reachable", exc_info=True)
             errors["base"] = "cloud_unreachable"
