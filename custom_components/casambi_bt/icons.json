@@ -5,5 +5,10 @@
         "default": "mdi:arrow-up-down"
       }
     }
+  },
+  "services": {
+    "export_offline_backup": {
+      "service": "mdi:key-chain-variant"
+    }
   }
 }

@@ -37,10 +37,15 @@ from homeassistant.exceptions import (
     HomeAssistantError,
     ServiceValidationError,
 )
-from homeassistant.helpers import device_registry as dr, issue_registry as ir
+from homeassistant.helpers import (
+    config_validation as cv,
+    device_registry as dr,
+    issue_registry as ir,
+)
 from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.httpx_client import get_async_client
+from homeassistant.helpers.typing import ConfigType
 
 from .const import (
     COMMAND_TIMEOUT,
@@ -54,6 +59,7 @@ from .const import (
     RECONNECT_BACKOFF_STEP,
 )
 from .migration import migrate_legacy_cache, restrict_cache_permissions
+from .services import async_setup_services
 
 _LOGGER: Final = logging.getLogger(__name__)
 
@@ -65,6 +71,15 @@ _RATE_LIMIT_STATUSES: Final = frozenset({403, 429})
 _CACHE_UUID_REGEX: Final = re.compile(r"[0-9a-f]{12}")
 
 type CasambiConfigEntry = ConfigEntry[CasambiApi]
+
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up the actions of the integration."""
+    async_setup_services(hass)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: CasambiConfigEntry) -> bool:

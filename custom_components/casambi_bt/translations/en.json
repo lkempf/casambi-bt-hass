@@ -2,20 +2,6 @@
   "config": {
     "flow_title": "{name}",
     "step": {
-      "user": {
-        "title": "Set up your Casambi network",
-        "description": "Find the bluetooth MAC address (network ID) in the luminaire details of your Casambi app.",
-        "data": {
-          "address": "Bluetooth MAC address",
-          "password": "Password",
-          "import_groups": "Import groups"
-        },
-        "data_description": {
-          "address": "Bluetooth MAC address of the Casambi network, e.g. AA:BB:CC:DD:EE:FF.",
-          "password": "Password of the Casambi network, not of your Casambi account.",
-          "import_groups": "Create light and number entities for the groups of the network."
-        }
-      },
       "bluetooth_confirm": {
         "title": "Set up {name}",
         "description": "A Casambi network was discovered. Enter its password to set it up.",
@@ -38,7 +24,43 @@
           "password": "Password of the Casambi network, not of your Casambi account."
         }
       },
-      "reconfigure": {
+      "cloud": {
+        "title": "Set up your Casambi network",
+        "description": "Find the bluetooth MAC address (network ID) in the luminaire details of your Casambi app.",
+        "data": {
+          "address": "Bluetooth MAC address",
+          "password": "Password",
+          "import_groups": "Import groups"
+        },
+        "data_description": {
+          "address": "Bluetooth MAC address of the Casambi network, e.g. AA:BB:CC:DD:EE:FF.",
+          "password": "Password of the Casambi network, not of your Casambi account.",
+          "import_groups": "Create light and number entities for the groups of the network."
+        }
+      },
+      "user": {
+        "title": "Set up a Casambi network",
+        "description": "Choose where the configuration of the network comes from.",
+        "menu_options": {
+          "cloud": "Casambi cloud (password of the network)",
+          "backup": "Offline backup (without the cloud)"
+        }
+      },
+      "backup": {
+        "title": "Set up from an offline backup",
+        "description": "Paste an offline backup created with the action \"Export offline backup\". The network is set up without the Casambi cloud. The backup contains the keys of the network; it is stored like the other data of the integration.",
+        "data": {
+          "backup": "Offline backup",
+          "password": "Password",
+          "import_groups": "Import groups"
+        },
+        "data_description": {
+          "backup": "The complete JSON text of the backup.",
+          "password": "Optional. Needed to get changes of the network from the Casambi cloud later.",
+          "import_groups": "Create light and number entities for the groups of the network."
+        }
+      },
+      "reconfigure_password": {
         "title": "Change the password of {name}",
         "description": "Enter the new password of the Casambi network {name}.",
         "data": {
@@ -46,6 +68,24 @@
         },
         "data_description": {
           "password": "Password of the Casambi network, not of your Casambi account."
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure {name}",
+        "description": "Choose what to change.",
+        "menu_options": {
+          "reconfigure_password": "Change the password",
+          "restore_backup": "Restore an offline backup"
+        }
+      },
+      "restore_backup": {
+        "title": "Restore an offline backup of {name}",
+        "description": "Restores the configuration of the network, e.g. when it was lost and the Casambi cloud can't be used. The integration reloads afterwards.",
+        "data": {
+          "backup": "Offline backup"
+        },
+        "data_description": {
+          "backup": "The complete JSON text of the backup."
         }
       }
     },
@@ -55,7 +95,9 @@
       "invalid_auth": "Invalid authentication",
       "unknown": "Unexpected error",
       "rate_limited": "The Casambi cloud temporarily refuses new logins. Wait a few minutes and try again.",
-      "cloud_unreachable": "The Casambi cloud is not reachable, so the password can't be verified. Check the internet connection and try again."
+      "cloud_unreachable": "The Casambi cloud is not reachable, so the password can't be verified. Check the internet connection and try again.",
+      "invalid_backup": "This isn't a valid offline backup.",
+      "wrong_network": "The backup belongs to another network."
     },
     "abort": {
       "already_configured": "Device is already configured",
@@ -108,6 +150,9 @@
     },
     "unsupported_protocol": {
       "message": "The protocol version of the Casambi network {address} isn't supported by this integration."
+    },
+    "backup_failed": {
+      "message": "The offline backup couldn't be created."
     }
   },
   "entity": {
@@ -126,6 +171,18 @@
     "no_connectable_scanner": {
       "title": "No bluetooth adapter for Casambi",
       "description": "The Casambi network {address} can't be reached because Home Assistant has no bluetooth adapter or proxy that supports connections. Add a local bluetooth adapter or an active bluetooth proxy. The integration connects automatically once one is available."
+    }
+  },
+  "services": {
+    "export_offline_backup": {
+      "name": "Export offline backup",
+      "description": "Returns everything needed to use a Casambi network without the Casambi cloud, including the keys of the network. Store the response like a password, e.g. in your password manager.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Network",
+          "description": "The Casambi network to export."
+        }
+      }
     }
   }
 }

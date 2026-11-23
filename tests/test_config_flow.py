@@ -1,5 +1,6 @@
 """Tests for the config flow."""
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from CasambiBt.errors import (
@@ -7,6 +8,7 @@ from CasambiBt.errors import (
     BluetoothError,
     CloudUnavailableError,
     NetworkOnlineUpdateNeededError,
+    OfflineBackupError,
 )
 from habluetooth import BluetoothServiceInfoBleak
 import pytest
@@ -14,7 +16,12 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.casambi_bt.config_flow import _validate_input
 from custom_components.casambi_bt.const import CONF_IMPORT_GROUPS, DOMAIN
-from homeassistant.config_entries import SOURCE_BLUETOOTH, SOURCE_USER, ConfigEntryState
+from homeassistant.config_entries import (
+    SOURCE_BLUETOOTH,
+    SOURCE_USER,
+    ConfigEntryState,
+    ConfigFlowResult,
+)
 from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
@@ -46,6 +53,18 @@ def _discovery_info(*, connectable: bool = True) -> BluetoothServiceInfoBleak:
         connectable=connectable,
         time=0,
         tx_power=None,
+    )
+
+
+async def _start_cloud_flow(hass: HomeAssistant) -> ConfigFlowResult:
+    """Start a user flow and choose the setup through the cloud."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    assert result["type"] is FlowResultType.MENU
+    assert result["menu_options"] == ["cloud", "backup"]
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "cloud"}
     )
 
 
@@ -94,11 +113,9 @@ async def test_validate_input_falls_back_to_cloud_login(
 @pytest.mark.usefixtures("mock_bluetooth", "mock_casambi", "mock_setup_entry")
 async def test_user_flow(hass: HomeAssistant) -> None:
     """A valid user input must create an entry with a normalized address."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": SOURCE_USER}
-    )
+    result = await _start_cloud_flow(hass)
     assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "user"
+    assert result["step_id"] == "cloud"
     assert result["errors"] == {}
 
     result = await hass.config_entries.flow.async_configure(
@@ -118,9 +135,7 @@ async def test_user_flow(hass: HomeAssistant) -> None:
 @pytest.mark.usefixtures("mock_bluetooth", "mock_casambi")
 async def test_user_flow_invalid_address(hass: HomeAssistant) -> None:
     """A malformed address must be reported on the address field."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": SOURCE_USER}
-    )
+    result = await _start_cloud_flow(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {**USER_INPUT, CONF_ADDRESS: "not-a-mac"}
     )
@@ -148,9 +163,7 @@ async def test_user_flow_errors_recover(
     expected: str,
 ) -> None:
     """Connection errors must be shown and the flow must recover."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": SOURCE_USER}
-    )
+    result = await _start_cloud_flow(hass)
 
     # An authentication error is retried once with a fresh login.
     mock_casambi.connect = AsyncMock(side_effect=[error, error])
@@ -170,9 +183,7 @@ async def test_user_flow_errors_recover(
 @pytest.mark.usefixtures("mock_casambi")
 async def test_user_flow_network_not_found(hass: HomeAssistant) -> None:
     """A network that is not in range must be reported as cannot_connect."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": SOURCE_USER}
-    )
+    result = await _start_cloud_flow(hass)
     with patch(
         "custom_components.casambi_bt.config_flow.async_ble_device_from_address",
         return_value=None,
@@ -194,9 +205,7 @@ async def test_user_flow_already_configured(
     """Adding a configured network again must abort without connecting."""
     config_entry.add_to_hass(hass)
 
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": SOURCE_USER}
-    )
+    result = await _start_cloud_flow(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], USER_INPUT
     )
@@ -372,8 +381,12 @@ async def test_reconfigure_flow(
     await hass.async_block_till_done()
 
     result = await config_entry.start_reconfigure_flow(hass)
+    assert result["type"] is FlowResultType.MENU
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "reconfigure_password"}
+    )
     assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "reconfigure"
+    assert result["step_id"] == "reconfigure_password"
 
     mock_casambi.connect = AsyncMock(side_effect=[BluetoothError(), None])
     result = await hass.config_entries.flow.async_configure(
@@ -449,3 +462,166 @@ async def test_validate_input_rate_limit_keeps_cache(
 
     mock_casambi.connect.assert_awaited_once()
     mock_casambi.invalidateCache.assert_not_awaited()
+
+
+BACKUP = {
+    "format": "casambi-bt-offline-backup",
+    "version": 1,
+    "address": TEST_ADDRESS,
+    "networkId": "net-1",
+    "network": {"network": {}},
+    "unitTypes": [],
+}
+
+
+async def _start_backup_flow(hass: HomeAssistant) -> ConfigFlowResult:
+    """Start a user flow and choose the setup from an offline backup."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "backup"}
+    )
+
+
+@pytest.mark.usefixtures("mock_bluetooth", "mock_setup_entry")
+async def test_backup_flow(hass: HomeAssistant, mock_casambi: MockCasambi) -> None:
+    """A network is set up from an offline backup without the cloud."""
+    result = await _start_backup_flow(hass)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "backup"
+
+    # An invalid backup is reported and the flow recovers.
+    mock_casambi.importOfflineBackup = AsyncMock(
+        side_effect=[OfflineBackupError("bad"), TEST_ADDRESS]
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"backup": json.dumps(BACKUP), CONF_IMPORT_GROUPS: False}
+    )
+    assert result["errors"] == {"backup": "invalid_backup"}
+    # The pasted backup holds the keys and is never shown again.
+    suggested = {
+        str(key): (key.description or {}).get("suggested_value")
+        for key in result["data_schema"].schema
+    }
+    assert suggested["backup"] is None
+    assert suggested[CONF_IMPORT_GROUPS] is False
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"backup": json.dumps(BACKUP), CONF_IMPORT_GROUPS: False}
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["title"] == "Test Network"
+    assert result["data"] == {CONF_ADDRESS: TEST_ADDRESS, CONF_PASSWORD: ""}
+    assert result["options"] == {CONF_IMPORT_GROUPS: False}
+    assert result["result"].unique_id == TEST_ADDRESS
+    mock_casambi.importOfflineBackup.assert_awaited_with(BACKUP)
+    assert mock_casambi.connect.await_args.kwargs["preferCache"] is True
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["not json", "[1, 2]", json.dumps({"no": "address"}), json.dumps({"address": "x"})],
+)
+@pytest.mark.usefixtures("mock_bluetooth", "mock_setup_entry")
+async def test_backup_flow_rejects_garbage(
+    hass: HomeAssistant, mock_casambi: MockCasambi, text: str
+) -> None:
+    """Text that isn't a backup is rejected before touching the cache."""
+    result = await _start_backup_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"backup": text, CONF_IMPORT_GROUPS: True}
+    )
+    assert result["errors"] == {"backup": "invalid_backup"}
+    mock_casambi.importOfflineBackup.assert_not_awaited()
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"backup": json.dumps(BACKUP), CONF_IMPORT_GROUPS: True}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.usefixtures("mock_casambi")
+async def test_backup_flow_network_not_in_range(hass: HomeAssistant) -> None:
+    """A restored network still has to be reachable."""
+    result = await _start_backup_flow(hass)
+    with patch(
+        "custom_components.casambi_bt.config_flow.async_ble_device_from_address",
+        return_value=None,
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"backup": json.dumps(BACKUP), CONF_IMPORT_GROUPS: True}
+        )
+    assert result["errors"] == {"base": "cannot_connect"}
+
+
+@pytest.mark.usefixtures("mock_bluetooth")
+async def test_backup_flow_already_configured(
+    hass: HomeAssistant, mock_casambi: MockCasambi, config_entry: MockConfigEntry
+) -> None:
+    """A configured network is restored with reconfigure, not added again."""
+    config_entry.add_to_hass(hass)
+    result = await _start_backup_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"backup": json.dumps(BACKUP), CONF_IMPORT_GROUPS: True}
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+    mock_casambi.importOfflineBackup.assert_not_awaited()
+
+
+async def _start_restore(
+    hass: HomeAssistant, config_entry: MockConfigEntry
+) -> ConfigFlowResult:
+    config_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    result = await config_entry.start_reconfigure_flow(hass)
+    assert result["type"] is FlowResultType.MENU
+    assert result["menu_options"] == ["reconfigure_password", "restore_backup"]
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "restore_backup"}
+    )
+
+
+@pytest.mark.usefixtures("mock_bluetooth")
+async def test_restore_backup(
+    hass: HomeAssistant, mock_casambi: MockCasambi, config_entry: MockConfigEntry
+) -> None:
+    """Restoring a backup refills the cache and reloads the entry."""
+    result = await _start_restore(hass, config_entry)
+    assert result["step_id"] == "restore_backup"
+
+    # A backup of another network is refused.
+    other = {**BACKUP, "address": "11:22:33:44:55:66"}
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"backup": json.dumps(other)}
+    )
+    assert result["errors"] == {"backup": "wrong_network"}
+    mock_casambi.importOfflineBackup.assert_not_awaited()
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"backup": "garbage"}
+    )
+    assert result["errors"] == {"backup": "invalid_backup"}
+
+    # A failing restore keeps the entry running.
+    mock_casambi.importOfflineBackup = AsyncMock(
+        side_effect=[OfflineBackupError("bad"), TEST_ADDRESS]
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"backup": json.dumps(BACKUP)}
+    )
+    assert result["errors"] == {"backup": "invalid_backup"}
+    assert config_entry.state is ConfigEntryState.LOADED
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"backup": json.dumps(BACKUP)}
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert config_entry.state is ConfigEntryState.LOADED
+    assert config_entry.data[CONF_PASSWORD] == "secret-password"

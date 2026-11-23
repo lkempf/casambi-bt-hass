@@ -1,7 +1,8 @@
 """Config flow for Casambi Bluetooth integration."""
 
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from functools import partial
+import json
 import logging
 from pathlib import Path
 import re
@@ -10,13 +11,14 @@ import tempfile
 from typing import Any, Final
 
 from bleak.backends.device import BLEDevice
-from CasambiBt import Casambi
+from CasambiBt import Casambi, normalizeAddress
 from CasambiBt.errors import (
     AuthenticationError,
     CasambiBtError,
     CloudUnavailableError,
     NetworkNotFoundError,
     NetworkOnlineUpdateNeededError,
+    OfflineBackupError,
 )
 import voluptuous as vol
 
@@ -51,7 +53,7 @@ from . import (
     get_cache_dir,
     is_rate_limited,
 )
-from .const import CONF_IMPORT_GROUPS, DOMAIN
+from .const import CONF_BACKUP, CONF_IMPORT_GROUPS, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -77,6 +79,18 @@ BLUETOOTH_CONFIRM_SCHEMA: Final = vol.Schema(
 )
 
 PASSWORD_SCHEMA: Final = vol.Schema({vol.Required(CONF_PASSWORD): PASSWORD_SELECTOR})
+
+BACKUP_SELECTOR: Final = TextSelector(TextSelectorConfig(multiline=True))
+
+BACKUP_SCHEMA: Final = vol.Schema(
+    {
+        vol.Required(CONF_BACKUP): BACKUP_SELECTOR,
+        vol.Optional(CONF_PASSWORD, default=""): PASSWORD_SELECTOR,
+        vol.Required(CONF_IMPORT_GROUPS, default=True): BooleanSelector(),
+    }
+)
+
+RESTORE_SCHEMA: Final = vol.Schema({vol.Required(CONF_BACKUP): BACKUP_SELECTOR})
 
 OPTIONS_SCHEMA: Final = vol.Schema(
     {vol.Required(CONF_IMPORT_GROUPS, default=True): BooleanSelector()}
@@ -161,6 +175,48 @@ async def _validate_input(
         )
 
 
+def _parse_backup(text: str) -> tuple[str, dict[str, Any]]:
+    """Return the address and the content of a pasted offline backup.
+
+    Only the address is read here to find the network; the library
+    validates the rest when restoring it.
+
+    :raises ValueError: The text isn't an offline backup.
+    :raises TypeError: The text isn't a JSON object.
+    """
+    backup = json.loads(text)
+    if not isinstance(backup, dict):
+        raise TypeError("The backup isn't an object.")
+    return normalizeAddress(str(backup["address"])), backup
+
+
+async def _restore_backup(
+    hass: HomeAssistant, backup: dict[str, Any], password: str
+) -> str:
+    """Restore an offline backup into the cache and connect once.
+
+    The connection uses the restored configuration and never the cloud.
+
+    Raises the library errors if the backup is invalid or the network
+    can't be reached.
+    """
+    casa = Casambi(get_async_client(hass), get_cache_dir(hass))
+    address = await casa.importOfflineBackup(backup)
+
+    bt_device = async_ble_device_from_address(hass, address, connectable=True)
+    if not bt_device:
+        raise NetworkNotFoundError
+
+    try:
+        await casa.connect(bt_device, password, preferCache=True)
+        return casa.networkName
+    finally:
+        try:
+            await casa.disconnect()
+        except Exception:  # pylint: disable=broad-except
+            _LOGGER.debug("Disconnecting after the validation failed", exc_info=True)
+
+
 class CasambiConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Casambi Bluetooth."""
 
@@ -191,11 +247,22 @@ class CasambiConfigFlow(ConfigFlow, domain=DOMAIN):
         self, address: str, password: str, *, verify_password: bool = False
     ) -> tuple[str | None, dict[str, str]]:
         """Validate the credentials and map failures to form errors."""
-        errors: dict[str, str] = {}
-        try:
-            title = await _validate_input(
+        return await self._async_try(
+            lambda: _validate_input(
                 self.hass, address, password, verify_password=verify_password
             )
+        )
+
+    async def _async_try(
+        self, connect: Callable[[], Awaitable[str]]
+    ) -> tuple[str | None, dict[str, str]]:
+        """Run a connection attempt and map failures to form errors."""
+        errors: dict[str, str] = {}
+        try:
+            title = await connect()
+        except OfflineBackupError:
+            _LOGGER.debug("Invalid offline backup", exc_info=True)
+            errors[CONF_BACKUP] = "invalid_backup"
         except AuthenticationError as err:
             _LOGGER.warning("Casambi login failed with status %s", err.status_code)
             errors["base"] = (
@@ -210,7 +277,7 @@ class CasambiConfigFlow(ConfigFlow, domain=DOMAIN):
             _LOGGER.debug("Casambi cloud not reachable", exc_info=True)
             errors["base"] = "cloud_unreachable"
         except CasambiBtError:
-            _LOGGER.debug("Connecting to %s failed", address, exc_info=True)
+            _LOGGER.debug("Connecting failed", exc_info=True)
             errors["base"] = "cannot_connect"
         except Exception:  # pylint: disable=broad-except
             _LOGGER.exception("Unexpected exception")
@@ -222,7 +289,20 @@ class CasambiConfigFlow(ConfigFlow, domain=DOMAIN):
     async def _async_try_connect_for_entry(
         self, entry: CasambiConfigEntry, password: str
     ) -> dict[str, str]:
-        """Validate new credentials of an existing entry.
+        """Validate new credentials of an existing entry."""
+        # A new password must be checked by the cloud, a cached session
+        # would accept any password.
+        return await self._async_with_entry_unloaded(
+            entry,
+            lambda: _validate_input(
+                self.hass, entry.data[CONF_ADDRESS], password, verify_password=True
+            ),
+        )
+
+    async def _async_with_entry_unloaded(
+        self, entry: CasambiConfigEntry, connect: Callable[[], Awaitable[str]]
+    ) -> dict[str, str]:
+        """Run a connection attempt for an existing entry.
 
         A loaded entry holds the bluetooth connection to the network, which
         blocks a second connection. Unload it while validating and set it up
@@ -232,11 +312,7 @@ class CasambiConfigFlow(ConfigFlow, domain=DOMAIN):
         if was_loaded:
             await self.hass.config_entries.async_unload(entry.entry_id)
 
-        # A new password must be checked by the cloud, a cached session
-        # would accept any password.
-        _, errors = await self._async_try_connect(
-            entry.data[CONF_ADDRESS], password, verify_password=True
-        )
+        _, errors = await self._async_try(connect)
 
         if errors and was_loaded:
             await self.hass.config_entries.async_setup(entry.entry_id)
@@ -293,10 +369,15 @@ class CasambiConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Handle entry of network information and attempt to connect."""
+        """Choose how to set up the network."""
         if async_scanner_count(self.hass, connectable=True) < 1:
             return self.async_abort(reason="bluetooth_error")
+        return self.async_show_menu(step_id="user", menu_options=["cloud", "backup"])
 
+    async def async_step_cloud(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Set up a network with the configuration from the Casambi cloud."""
         errors: dict[str, str] = {}
         if user_input is not None:
             address = normalize_address(user_input[CONF_ADDRESS])
@@ -313,8 +394,41 @@ class CasambiConfigFlow(ConfigFlow, domain=DOMAIN):
                     return self._async_create_casa_entry(title, address, user_input)
 
         return self.async_show_form(
-            step_id="user",
+            step_id="cloud",
             data_schema=self.add_suggested_values_to_schema(USER_SCHEMA, user_input),
+            errors=errors,
+        )
+
+    async def async_step_backup(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Set up a network from an offline backup, without the cloud."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                address, backup = _parse_backup(user_input[CONF_BACKUP])
+            except ValueError, KeyError, TypeError:
+                errors[CONF_BACKUP] = "invalid_backup"
+            else:
+                await self.async_set_unique_id(address)
+                self._abort_if_unique_id_configured()
+
+                password = user_input.get(CONF_PASSWORD, "")
+                title, errors = await self._async_try(
+                    lambda: _restore_backup(self.hass, backup, password)
+                )
+                if title is not None:
+                    return self._async_create_casa_entry(
+                        title, address, {**user_input, CONF_PASSWORD: password}
+                    )
+
+        return self.async_show_form(
+            step_id="backup",
+            data_schema=self.add_suggested_values_to_schema(
+                BACKUP_SCHEMA,
+                # Never show the pasted backup again, it holds the keys.
+                {k: v for k, v in (user_input or {}).items() if k != CONF_BACKUP},
+            ),
             errors=errors,
         )
 
@@ -350,6 +464,16 @@ class CasambiConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Choose what to change on a configured network."""
+        return self.async_show_menu(
+            step_id="reconfigure",
+            menu_options=["reconfigure_password", "restore_backup"],
+            description_placeholders={"name": self._get_reconfigure_entry().title},
+        )
+
+    async def async_step_reconfigure_password(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         """Change the password of a configured network.
 
         The address identifies the network and is the unique id of the
@@ -368,8 +492,45 @@ class CasambiConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
 
         return self.async_show_form(
-            step_id="reconfigure",
+            step_id="reconfigure_password",
             data_schema=PASSWORD_SCHEMA,
+            description_placeholders={"name": entry.title},
+            errors=errors,
+        )
+
+    async def async_step_restore_backup(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Restore the configuration of a network from an offline backup.
+
+        Needed when the cache was lost and the cloud can't be used.
+        """
+        entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            try:
+                address, backup = _parse_backup(user_input[CONF_BACKUP])
+            except ValueError, KeyError, TypeError:
+                errors[CONF_BACKUP] = "invalid_backup"
+            else:
+                if address != entry.data[CONF_ADDRESS]:
+                    errors[CONF_BACKUP] = "wrong_network"
+                else:
+                    errors = await self._async_with_entry_unloaded(
+                        entry,
+                        lambda: _restore_backup(
+                            self.hass, backup, entry.data[CONF_PASSWORD]
+                        ),
+                    )
+                    if not errors:
+                        return self.async_update_reload_and_abort(
+                            entry, reload_even_if_entry_is_unchanged=True
+                        )
+
+        return self.async_show_form(
+            step_id="restore_backup",
+            data_schema=RESTORE_SCHEMA,
             description_placeholders={"name": entry.title},
             errors=errors,
         )

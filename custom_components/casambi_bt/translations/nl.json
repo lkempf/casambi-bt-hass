@@ -2,20 +2,6 @@
   "config": {
     "flow_title": "{name}",
     "step": {
-      "user": {
-        "title": "Stel je Casambi netwerk in",
-        "description": "Het bluetooth MAC-adres (netwerk-ID) vind je in de armatuurgegevens van de Casambi app.",
-        "data": {
-          "address": "Bluetooth MAC-adres",
-          "password": "Wachtwoord",
-          "import_groups": "Groepen importeren"
-        },
-        "data_description": {
-          "address": "Bluetooth MAC-adres van het Casambi netwerk, bijv. AA:BB:CC:DD:EE:FF.",
-          "password": "Wachtwoord van het Casambi netwerk, niet van je Casambi account.",
-          "import_groups": "Licht- en nummerentiteiten aanmaken voor de groepen van het netwerk."
-        }
-      },
       "bluetooth_confirm": {
         "title": "{name} instellen",
         "description": "Er is een Casambi netwerk gevonden. Voer het wachtwoord in om het in te stellen.",
@@ -38,7 +24,43 @@
           "password": "Wachtwoord van het Casambi netwerk, niet van je Casambi account."
         }
       },
-      "reconfigure": {
+      "cloud": {
+        "title": "Stel je Casambi netwerk in",
+        "description": "Het bluetooth MAC-adres (netwerk-ID) vind je in de armatuurgegevens van de Casambi app.",
+        "data": {
+          "address": "Bluetooth MAC-adres",
+          "password": "Wachtwoord",
+          "import_groups": "Groepen importeren"
+        },
+        "data_description": {
+          "address": "Bluetooth MAC-adres van het Casambi netwerk, bijv. AA:BB:CC:DD:EE:FF.",
+          "password": "Wachtwoord van het Casambi netwerk, niet van je Casambi account.",
+          "import_groups": "Licht- en nummerentiteiten aanmaken voor de groepen van het netwerk."
+        }
+      },
+      "user": {
+        "title": "Casambi netwerk instellen",
+        "description": "Kies waar de configuratie van het netwerk vandaan komt.",
+        "menu_options": {
+          "cloud": "Casambi cloud (wachtwoord van het netwerk)",
+          "backup": "Offline back-up (zonder cloud)"
+        }
+      },
+      "backup": {
+        "title": "Instellen vanuit een offline back-up",
+        "description": "Plak een offline back-up die met de actie \"Offline back-up exporteren\" is gemaakt. Het netwerk wordt zonder de Casambi cloud ingesteld. De back-up bevat de sleutels van het netwerk; hij wordt opgeslagen zoals de andere gegevens van de integratie.",
+        "data": {
+          "backup": "Offline back-up",
+          "password": "Wachtwoord",
+          "import_groups": "Groepen importeren"
+        },
+        "data_description": {
+          "backup": "De volledige JSON-tekst van de back-up.",
+          "password": "Optioneel. Nodig om later wijzigingen van het netwerk uit de Casambi cloud over te nemen.",
+          "import_groups": "Licht- en nummerentiteiten aanmaken voor de groepen van het netwerk."
+        }
+      },
+      "reconfigure_password": {
         "title": "Wachtwoord van {name} wijzigen",
         "description": "Voer het nieuwe wachtwoord van het Casambi netwerk {name} in.",
         "data": {
@@ -46,6 +68,24 @@
         },
         "data_description": {
           "password": "Wachtwoord van het Casambi netwerk, niet van je Casambi account."
+        }
+      },
+      "reconfigure": {
+        "title": "{name} opnieuw configureren",
+        "description": "Kies wat je wilt wijzigen.",
+        "menu_options": {
+          "reconfigure_password": "Wachtwoord wijzigen",
+          "restore_backup": "Offline back-up herstellen"
+        }
+      },
+      "restore_backup": {
+        "title": "Offline back-up van {name} herstellen",
+        "description": "Herstelt de configuratie van het netwerk, bijv. wanneer die verloren is gegaan en de Casambi cloud niet bruikbaar is. De integratie wordt daarna opnieuw geladen.",
+        "data": {
+          "backup": "Offline back-up"
+        },
+        "data_description": {
+          "backup": "De volledige JSON-tekst van de back-up."
         }
       }
     },
@@ -55,7 +95,9 @@
       "invalid_auth": "Ongeldige authenticatie",
       "unknown": "Onverwachte fout",
       "rate_limited": "De Casambi cloud weigert tijdelijk nieuwe aanmeldingen. Wacht een paar minuten en probeer het opnieuw.",
-      "cloud_unreachable": "De Casambi cloud is niet bereikbaar, daardoor kan het wachtwoord niet worden gecontroleerd. Controleer de internetverbinding en probeer het opnieuw."
+      "cloud_unreachable": "De Casambi cloud is niet bereikbaar, daardoor kan het wachtwoord niet worden gecontroleerd. Controleer de internetverbinding en probeer het opnieuw.",
+      "invalid_backup": "Dit is geen geldige offline back-up.",
+      "wrong_network": "De back-up hoort bij een ander netwerk."
     },
     "abort": {
       "already_configured": "Apparaat is al geconfigureerd",
@@ -108,6 +150,9 @@
     },
     "unsupported_protocol": {
       "message": "De protocolversie van het Casambi netwerk {address} wordt niet ondersteund door deze integratie."
+    },
+    "backup_failed": {
+      "message": "De offline back-up kon niet worden gemaakt."
     }
   },
   "entity": {
@@ -126,6 +171,18 @@
     "no_connectable_scanner": {
       "title": "Geen bluetooth adapter voor Casambi",
       "description": "Het Casambi netwerk {address} is niet bereikbaar omdat Home Assistant geen bluetooth adapter of proxy heeft die verbindingen ondersteunt. Voeg een lokale bluetooth adapter of een actieve bluetooth proxy toe. De integratie maakt automatisch verbinding zodra er een beschikbaar is."
+    }
+  },
+  "services": {
+    "export_offline_backup": {
+      "name": "Offline back-up exporteren",
+      "description": "Geeft alles terug om een Casambi netwerk zonder de Casambi cloud te gebruiken, inclusief de sleutels van het netwerk. Bewaar het antwoord als een wachtwoord, bijv. in je wachtwoordmanager.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Netwerk",
+          "description": "Het Casambi netwerk dat moet worden geëxporteerd."
+        }
+      }
     }
   }
 }
